@@ -50,6 +50,7 @@ import org.jruby.runtime.marshal.DataType;
 @JRubyClass(name = "Mutex")
 public class Mutex extends RubyObject implements DataType {
     ReentrantLock lock = new ReentrantLock();
+    RubyThread heldBy;
 
     @JRubyMethod(name = "new", rest = true, meta = true)
     public static Mutex newInstance(ThreadContext context, IRubyObject recv, IRubyObject[] args, Block block) {
@@ -81,7 +82,7 @@ public class Mutex extends RubyObject implements DataType {
 
     @JRubyMethod
     public RubyBoolean try_lock(ThreadContext context) {
-        if (lock.isHeldByCurrentThread()) {
+        if (isHeldByCurrentThread(context)) {
             return context.fals;
         }
         return context.runtime.newBoolean(context.getThread().tryLock(lock));
@@ -102,6 +103,8 @@ public class Mutex extends RubyObject implements DataType {
             }
         }
 
+        heldBy = context.getFiberCurrentThread();
+
         return this;
     }
 
@@ -110,9 +113,11 @@ public class Mutex extends RubyObject implements DataType {
         if (!lock.isLocked()) {
             throw context.runtime.newThreadError("Mutex is not locked");
         }
-        if (!lock.isHeldByCurrentThread()) {
+        if (!isHeldByCurrentThread(context)) {
             throw context.runtime.newThreadError("Mutex is not owned by calling thread");
         }
+
+        heldBy = null;
 
         boolean hasQueued = lock.hasQueuedThreads();
         context.getThread().unlock(lock);
@@ -165,13 +170,17 @@ public class Mutex extends RubyObject implements DataType {
 
     @JRubyMethod(name = "owned?")
     public IRubyObject owned_p(ThreadContext context) {
-        return context.runtime.newBoolean(lock.isHeldByCurrentThread());
+        return context.runtime.newBoolean(isHeldByCurrentThread(context));
     }
 
     private void checkRelocking(ThreadContext context) {
-        if (lock.isHeldByCurrentThread()) {
+        if (isHeldByCurrentThread(context)) {
             throw context.runtime.newThreadError("Mutex relocking by same thread");
         }
+    }
+
+    private boolean isHeldByCurrentThread(ThreadContext context) {
+        return context.getFiberCurrentThread() == heldBy;
     }
 
 }
