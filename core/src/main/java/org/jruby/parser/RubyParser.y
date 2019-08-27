@@ -48,6 +48,7 @@ import org.jruby.ast.ClassVarAsgnNode;
 import org.jruby.ast.Colon3Node;
 import org.jruby.ast.ConstNode;
 import org.jruby.ast.ConstDeclNode;
+import org.jruby.ast.DefinedNode;
 import org.jruby.ast.DStrNode;
 import org.jruby.ast.DSymbolNode;
 import org.jruby.ast.DXStrNode;
@@ -70,6 +71,7 @@ import org.jruby.ast.IfNode;
 import org.jruby.ast.InstAsgnNode;
 import org.jruby.ast.InstVarNode;
 import org.jruby.ast.IterNode;
+import org.jruby.ast.KeywordArgNode;
 import org.jruby.ast.LambdaNode;
 import org.jruby.ast.ListNode;
 import org.jruby.ast.LiteralNode;
@@ -1242,7 +1244,7 @@ arg             : lhs '=' arg_rhs {
                     $$ = support.newOrNode($1, $3);
                 }
                 | keyword_defined opt_nl arg {
-                    $$ = support.new_defined($1.intValue(), $3);
+                    $$ = new DefinedNode($1.intValue(), $3);
                 }
                 | arg '?' arg opt_nl ':' arg {
                     value_expr(lexer, $1);
@@ -1490,7 +1492,7 @@ primary         : literal
                     $$ = new YieldNode($1, null);
                 }
                 | keyword_defined opt_nl tLPAREN2 expr rparen {
-                    $$ = support.new_defined($1.intValue(), $4);
+                    $$ = new DefinedNode($1.intValue(), $4);
                 }
                 | keyword_not tLPAREN2 expr rparen {
                     $$ = support.getOperatorCallNode(support.getConditionNode($3), lexer.BANG);
@@ -2235,7 +2237,7 @@ numeric         : simple_numeric {
                     $$ = $1;  
                 }
                 | tUMINUS_NUM simple_numeric %prec tLOWEST {
-                     $$ = support.negateNumeric($2);
+                    $$ = support.negateNumeric(lexer, $2);
                 }
 
 simple_numeric  : tINTEGER {
@@ -2506,19 +2508,19 @@ f_label 	: tLABEL {
 // [!null]
 f_kw            : f_label arg_value {
                     lexer.setCurrentArg(null);
-                    $$ = support.keyword_arg($2.getLine(), support.assignableKeyword($1, $2));
+                    $$ = new KeywordArgNode($2.getLine(), support.assignableKeyword($1, $2));
                 }
                 | f_label {
                     lexer.setCurrentArg(null);
-                    $$ = support.keyword_arg(lexer.getLine(), support.assignableKeyword($1, new RequiredKeywordArgumentValueNode()));
+                    $$ = new KeywordArgNode(lexer.getLine(), support.assignableKeyword($1, new RequiredKeywordArgumentValueNode()));
                 }
 
 // [!null]
 f_block_kw      : f_label primary_value {
-                    $$ = support.keyword_arg(support.getLine($2), support.assignableKeyword($1, $2));
+                    $$ = new KeywordArgNode(support.getLine($2), support.assignableKeyword($1, $2));
                 }
                 | f_label {
-                    $$ = support.keyword_arg(lexer.getLine(), support.assignableKeyword($1, new RequiredKeywordArgumentValueNode()));
+                    $$ = new KeywordArgNode(lexer.getLine(), support.assignableKeyword($1, new RequiredKeywordArgumentValueNode()));
                 }
              
 

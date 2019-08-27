@@ -708,6 +708,10 @@ public class ParserSupport {
         return array;
     }
 
+    public static int line(ISourcePosition one, ISourcePosition two) {
+        return one == null ? two.getLine() : one.getLine();
+    }
+
     public ISourcePosition position(ISourcePositionHolder one, ISourcePositionHolder two) {
         return one == null ? two.getPosition() : one.getPosition();
     }
@@ -717,7 +721,7 @@ public class ParserSupport {
         
         if (left == null && right == null) return new AndNode(lexer.getRubySourceline(), makeNullNil(left), makeNullNil(right));
         
-        return new AndNode(position(left, right).getLine(), makeNullNil(left), makeNullNil(right));
+        return new AndNode(line(left, right), makeNullNil(left), makeNullNil(right));
     }
 
     public OrNode newOrNode(Node left, Node right) {
@@ -725,7 +729,7 @@ public class ParserSupport {
 
         if (left == null && right == null) return new OrNode(lexer.getRubySourceline(), makeNullNil(left), makeNullNil(right));
         
-        return new OrNode(position(left, right).getLine(), makeNullNil(left), makeNullNil(right));
+        return new OrNode(line(left, right), makeNullNil(left), makeNullNil(right));
     }
 
     /**
@@ -874,10 +878,10 @@ public class ParserSupport {
             if (iter != null) lexer.compile_error(PID.BLOCK_ARG_AND_BLOCK_GIVEN, "Both block arg and actual block given.");
 
             BlockPassNode blockPass = (BlockPassNode) argsNode;
-            return new CallNode(position(receiver, argsNode).getLine(), receiver, symbolID(name), blockPass.getArgsNode(), blockPass, isLazy(callType));
+            return new CallNode(line(receiver, argsNode), receiver, symbolID(name), blockPass.getArgsNode(), blockPass, isLazy(callType));
         }
 
-        return new CallNode(position(receiver, argsNode).getLine(), receiver, symbolID(name), argsNode, iter, isLazy(callType));
+        return new CallNode(line(receiver, argsNode), receiver, symbolID(name), argsNode, iter, isLazy(callType));
 
     }
 
@@ -1094,7 +1098,7 @@ public class ParserSupport {
         return new YieldNode(line, node);
     }
     
-    public NumericNode negateInteger(NumericNode integerNode) {
+    private static NumericNode negateInteger(NumericNode integerNode) {
         if (integerNode instanceof FixnumNode) {
             FixnumNode fixnumNode = (FixnumNode) integerNode;
             
@@ -1116,19 +1120,19 @@ public class ParserSupport {
         return integerNode;
     }
     
-    public FloatNode negateFloat(FloatNode floatNode) {
+    private static FloatNode negateFloat(FloatNode floatNode) {
         floatNode.setValue(-floatNode.getValue());
         
         return floatNode;
     }
 
-    public ComplexNode negateComplexNode(ComplexNode complexNode) {
-        complexNode.setNumber(negateNumeric(complexNode.getNumber()));
+    private static ComplexNode negateComplexNode(RubyLexer lexer, ComplexNode complexNode) {
+        complexNode.setNumber(negateNumeric(lexer, complexNode.getNumber()));
 
         return complexNode;
     }
 
-    public RationalNode negateRational(RationalNode rationalNode) {
+    private static RationalNode negateRational(RationalNode rationalNode) {
         return (RationalNode) rationalNode.negate();
     }
     
@@ -1190,6 +1194,13 @@ public class ParserSupport {
 
     public Node newUndef(int line, Node nameNode) {
         return new UndefNode(line, nameNode);
+    }
+
+    /**
+     * generate parsing error
+     */
+    public static void yyerror(RubyLexer lexer, String message) {
+        lexer.compile_error(PID.GRAMMAR_ERROR, message);
     }
 
     /**
@@ -1327,7 +1338,7 @@ public class ParserSupport {
     }
 
     // 1.9
-    public Node arg_append(Node node1, Node node2) {
+    public static Node arg_append(Node node1, Node node2) {
         if (node1 == null) return new ArrayNode(node2);
         if (node1 instanceof ListNode) return ((ListNode) node1).add(node2);
         if (node1 instanceof BlockPassNode) return arg_append(((BlockPassNode) node1).getBodyNode(), node2);
@@ -1339,7 +1350,7 @@ public class ParserSupport {
                     new ArrayNode(body).add(node2));
         }
 
-        return new ArgsPushNode(position(node1, node2).getLine(), node1, node2);
+        return new ArgsPushNode(line(node1, node2), node1, node2);
     }
 
     private List<Integer> allocateNamedLocals(RegexpNode regexpNode) {
@@ -1458,29 +1469,21 @@ public class ParserSupport {
         return codeRange;
     }
     
-    public KeywordArgNode keyword_arg(int line, AssignableNode assignable) {
-        return new KeywordArgNode(line, assignable);
-    }
-    
-    public NumericNode negateNumeric(NumericNode node) {
+    public static NumericNode negateNumeric(RubyLexer lexer, NumericNode node) {
         switch (node.getNodeType()) {
             case FIXNUMNODE:
             case BIGNUMNODE:
                 return negateInteger(node);
             case COMPLEXNODE:
-                return negateComplexNode((ComplexNode) node);
+                return negateComplexNode(lexer, (ComplexNode) node);
             case FLOATNODE:
                 return negateFloat((FloatNode) node);
             case RATIONALNODE:
                 return negateRational((RationalNode) node);
         }
         
-        yyerror("Invalid or unimplemented numeric to negate: " + node.toString());
+        yyerror(lexer, "Invalid or unimplemented numeric to negate: " + node.toString());
         return null;
-    }
-    
-    public Node new_defined(int line, Node something) {
-        return new DefinedNode(line, something);
     }
 
     public static final ByteList INTERNAL_ID = new ByteList(new byte[] {}, USASCIIEncoding.INSTANCE);
