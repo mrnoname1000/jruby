@@ -224,7 +224,7 @@ public class ParserSupport {
             line = topOfAST != null ? topOfAST.getLine() : result.getBeginNodes().get(0).getLine();
             BlockNode newTopOfAST = new BlockNode(line);
             for (Node beginNode : result.getBeginNodes()) {
-                appendToBlock(newTopOfAST, beginNode);
+                appendToBlock(lexer, newTopOfAST, beginNode);
             }
 
             // Add real top to new top (unless this top is empty [only begin/end nodes or truly empty])
@@ -236,7 +236,7 @@ public class ParserSupport {
     }
     
     /* MRI: block_append */
-    public Node appendToBlock(Node head, Node tail) {
+    public static Node appendToBlock(RubyLexer lexer, Node head, Node tail) {
         if (tail == null) return head;
         if (head == null) return tail;
 
@@ -244,8 +244,8 @@ public class ParserSupport {
             head = new BlockNode(head.getLine()).add(head);
         }
 
-        if (warnings.isVerbose() && isBreakStatement(((ListNode) head).getLast()) && Options.PARSER_WARN_NOT_REACHED.load()) {
-            warnings.warning(ID.STATEMENT_NOT_REACHED, lexer.getFile(), tail.getLine(), "statement not reached");
+        if (lexer.getWarnings().isVerbose() && isBreakStatement(((ListNode) head).getLast()) && Options.PARSER_WARN_NOT_REACHED.load()) {
+            lexer.getWarnings().warning(ID.STATEMENT_NOT_REACHED, lexer.getFile(), tail.getLine(), "statement not reached");
         }
 
         // Assumption: tail is never a list node
@@ -260,17 +260,17 @@ public class ParserSupport {
         return currentScope.assign(lexer.getLine(), name, makeNullNil(value));
     }
 
-    public Node getOperatorCallNode(Node firstNode, ByteList operator) {
-        checkExpression(firstNode);
+    public static Node getOperatorCallNode(RubyLexer lexer, Node firstNode, ByteList operator) {
+        value_expr(lexer, firstNode);
 
-        return new CallNode(firstNode.getLine(), firstNode, symbolID(operator), null, null, false);
+        return new CallNode(firstNode.getLine(), firstNode, symbolID(lexer, operator), null, null, false);
     }
     
-    public Node getOperatorCallNode(Node firstNode, ByteList operator, Node secondNode) {
-        return getOperatorCallNode(firstNode, operator, secondNode, -1);
+    public static Node getOperatorCallNode(RubyLexer lexer, Node firstNode, ByteList operator, Node secondNode) {
+        return getOperatorCallNode(lexer, firstNode, operator, secondNode, -1);
     }
 
-    public Node getOperatorCallNode(Node firstNode, ByteList operator, Node secondNode, int defaultPosition) {
+    public static Node getOperatorCallNode(RubyLexer lexer, Node firstNode, ByteList operator, Node secondNode, int defaultPosition) {
         if (defaultPosition != -1) {
             firstNode = checkForNilNode(firstNode, defaultPosition);
             secondNode = checkForNilNode(secondNode, defaultPosition);
@@ -279,7 +279,7 @@ public class ParserSupport {
         value_expr(lexer, firstNode);
         value_expr(lexer, secondNode);
 
-        return new CallNode(firstNode.getLine(), firstNode, symbolID(operator), new ArrayNode(secondNode), null, false);
+        return new CallNode(firstNode.getLine(), firstNode, symbolID(lexer, operator), new ArrayNode(secondNode), null, false);
     }
 
     public Node getMatchNode(Node firstNode, Node secondNode) {
@@ -301,7 +301,7 @@ public class ParserSupport {
             return new Match3Node(firstNode.getLine(), firstNode, secondNode);
         }
 
-        return getOperatorCallNode(firstNode, CommonByteLists.EQUAL_TILDE, secondNode);
+        return getOperatorCallNode(lexer, firstNode, CommonByteLists.EQUAL_TILDE, secondNode);
     }
 
     /**
@@ -400,7 +400,7 @@ public class ParserSupport {
      * @param node to be checked
      * @return true if a control node, false otherwise
      */
-    public boolean isBreakStatement(Node node) {
+    private static boolean isBreakStatement(Node node) {
         breakLoop: do {
             if (node == null) return false;
 
@@ -621,7 +621,7 @@ public class ParserSupport {
         return false;
     }
     
-    protected Node makeNullNil(Node node) {
+    protected static Node makeNullNil(Node node) {
         return node == null ? NilImplicitNode.NIL : node;
     }
 
@@ -690,7 +690,7 @@ public class ParserSupport {
 
         if (node instanceof FixnumNode) {
             warnUnlessEOption(ID.LITERAL_IN_CONDITIONAL_RANGE, node, "integer literal in conditional range");
-            return getOperatorCallNode(node, lexer.EQ_EQ, new GlobalVarNode(node.getLine(), symbolID(lexer.DOLLAR_DOT)));
+            return getOperatorCallNode(lexer, node, lexer.EQ_EQ, new GlobalVarNode(node.getLine(), symbolID(lexer.DOLLAR_DOT)));
         } 
 
         return node;
@@ -712,11 +712,7 @@ public class ParserSupport {
         return one == null ? two.getLine() : one.getLine();
     }
 
-    public ISourcePosition position(ISourcePositionHolder one, ISourcePositionHolder two) {
-        return one == null ? two.getPosition() : one.getPosition();
-    }
-
-    public AndNode newAndNode(Node left, Node right) {
+    public static AndNode newAndNode(RubyLexer lexer, Node left, Node right) {
         value_expr(lexer, left);
         
         if (left == null && right == null) return new AndNode(lexer.getRubySourceline(), makeNullNil(left), makeNullNil(right));
@@ -724,7 +720,7 @@ public class ParserSupport {
         return new AndNode(line(left, right), makeNullNil(left), makeNullNil(right));
     }
 
-    public OrNode newOrNode(Node left, Node right) {
+    public static OrNode newOrNode(RubyLexer lexer, Node left, Node right) {
         value_expr(lexer, left);
 
         if (left == null && right == null) return new OrNode(lexer.getRubySourceline(), makeNullNil(left), makeNullNil(right));
@@ -828,8 +824,12 @@ public class ParserSupport {
         return newNode;
     }
 
+    public static RubySymbol symbolID(RubyLexer lexer, ByteList identifierValue) {
+        return RubySymbol.newIDSymbol(lexer.getRuntime(), identifierValue);
+    }
+
     public RubySymbol symbolID(ByteList identifierValue) {
-        return RubySymbol.newIDSymbol(getConfiguration().getRuntime(), identifierValue);
+        return RubySymbol.newIDSymbol(lexer.getRuntime(), identifierValue);
     }
 
     public Node newOpAsgn(Node receiverNode, ByteList callType, Node valueNode, ByteList variableName, ByteList operatorName) {
@@ -1136,7 +1136,7 @@ public class ParserSupport {
         return (RationalNode) rationalNode.negate();
     }
     
-    private Node checkForNilNode(Node node, int defaultLine) {
+    private static Node checkForNilNode(Node node, int defaultLine) {
         return (node == null) ? new NilNode(defaultLine) : node;
     }
 

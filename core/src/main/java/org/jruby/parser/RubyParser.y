@@ -352,7 +352,7 @@ top_stmts     : none
                     $$ = support.newline_node($1, support.getLine($1));
               }
               | top_stmts terms top_stmt {
-                    $$ = support.appendToBlock($1, support.newline_node($3, support.getLine($3)));
+                    $$ = support.appendToBlock(lexer, $1, support.newline_node($3, support.getLine($3)));
               }
               | error top_stmt {
                     $$ = $2;
@@ -371,13 +371,13 @@ bodystmt      : compstmt opt_rescue opt_else opt_ensure {
                       node = new RescueNode(support.getLine($1), $1, $2, $3);
                   } else if ($3 != null) {
                       support.warn(ID.ELSE_WITHOUT_RESCUE, support.getLine($1), "else without rescue is useless");
-                      node = support.appendToBlock($1, $3);
+                      node = support.appendToBlock(lexer, $1, $3);
                   }
                   if ($4 != null) {
                       if (node != null) {
                           node = new EnsureNode(support.getLine($1), support.makeNullNil(node), $4);
                       } else {
-                          node = support.appendToBlock($4, NilImplicitNode.NIL);
+                          node = support.appendToBlock(lexer, $4, NilImplicitNode.NIL);
                       }
                   }
 
@@ -397,7 +397,7 @@ stmts           : none
                     $$ = support.newline_node($1, support.getLine($1));
                 }
                 | stmts terms stmt_or_begin {
-                    $$ = support.appendToBlock($1, support.newline_node($3, support.getLine($3)));
+                    $$ = support.appendToBlock(lexer, $1, support.newline_node($3, support.getLine($3)));
                 }
                 | error stmt {
                     $$ = $2;
@@ -494,7 +494,7 @@ command_asgn    : lhs '=' command_rhs {
                         $1.setValueNode($3);
                         $$ = new OpAsgnAndNode(support.gettable2($1), $1);
                     } else {
-                        $1.setValueNode(support.getOperatorCallNode(support.gettable2($1), asgnOp, $3));
+                        $1.setValueNode(support.getOperatorCallNode(lexer, support.gettable2($1), asgnOp, $3));
                         $1.setLine(line);
                         $$ = $1;
                     }
@@ -534,16 +534,16 @@ command_rhs     : command_call %prec tOP_ASGN {
 // Node:expr *CURRENT* all but arg so far
 expr            : command_call
                 | expr keyword_and expr {
-                    $$ = support.newAndNode($1, $3);
+                    $$ = support.newAndNode(lexer, $1, $3);
                 }
                 | expr keyword_or expr {
-                    $$ = support.newOrNode($1, $3);
+                    $$ = support.newOrNode(lexer, $1, $3);
                 }
                 | keyword_not opt_nl expr {
-                    $$ = support.getOperatorCallNode(support.getConditionNode($3), lexer.BANG);
+                    $$ = support.getOperatorCallNode(lexer, support.getConditionNode($3), lexer.BANG);
                 }
                 | tBANG command_call {
-                    $$ = support.getOperatorCallNode(support.getConditionNode($2), $1);
+                    $$ = support.getOperatorCallNode(lexer, support.getConditionNode($2), $1);
                 }
                 | arg
 
@@ -882,7 +882,7 @@ undef_list      : fitem {
                 | undef_list ',' {
                     lexer.setState(EXPR_FNAME|EXPR_FITEM);
                 } fitem {
-                    $$ = support.appendToBlock($1, support.newUndef($1.getLine(), $4));
+                    $$ = support.appendToBlock(lexer, $1, support.newUndef($1.getLine(), $4));
                 }
 
 // ByteList:op
@@ -1122,7 +1122,7 @@ arg             : lhs '=' arg_rhs {
                         $$ = new OpAsgnAndNode(support.gettable2($1), $1);
                     } else {
                       
-                        $1.setValueNode(support.getOperatorCallNode(support.gettable2($1), asgnOp, $3));
+                        $1.setValueNode(support.getOperatorCallNode(lexer, support.gettable2($1), asgnOp, $3));
                         $$ = $1;
                     }
                 }
@@ -1163,55 +1163,55 @@ arg             : lhs '=' arg_rhs {
                     $$ = new DotNode(support.getLine($1), support.makeNullNil($1), support.makeNullNil($3), true, isLiteral);
                 }
                 | arg tPLUS arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tMINUS arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tSTAR2 arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tDIVIDE arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tPERCENT arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tPOW arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | tUMINUS_NUM simple_numeric tPOW arg {
-                    $$ = support.getOperatorCallNode(support.getOperatorCallNode($2, $3, $4, lexer.getLine()), $1);
+                    $$ = support.getOperatorCallNode(lexer, support.getOperatorCallNode(lexer, $2, $3, $4, lexer.getLine()), $1);
                 }
                 | tUPLUS arg {
-                    $$ = support.getOperatorCallNode($2, $1);
+                    $$ = support.getOperatorCallNode(lexer, $2, $1);
                 }
                 | tUMINUS arg {
-                    $$ = support.getOperatorCallNode($2, $1);
+                    $$ = support.getOperatorCallNode(lexer, $2, $1);
                 }
                 | arg tPIPE arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tCARET arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tAMPER2 arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tCMP arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | rel_expr   %prec tCMP {
                     $$ = $1;
                 }
                 | arg tEQ arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tEQQ arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tNEQ arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tMATCH arg {
                     $$ = support.getMatchNode($1, $3);
@@ -1223,25 +1223,25 @@ arg             : lhs '=' arg_rhs {
                   */
                 }
                 | arg tNMATCH arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | tBANG arg {
-                    $$ = support.getOperatorCallNode(support.getConditionNode($2), $1);
+                    $$ = support.getOperatorCallNode(lexer, support.getConditionNode($2), $1);
                 }
                 | tTILDE arg {
-                    $$ = support.getOperatorCallNode($2, $1);
+                    $$ = support.getOperatorCallNode(lexer, $2, $1);
                 }
                 | arg tLSHFT arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tRSHFT arg {
-                    $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                    $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
                 | arg tANDOP arg {
-                    $$ = support.newAndNode($1, $3);
+                    $$ = support.newAndNode(lexer, $1, $3);
                 }
                 | arg tOROP arg {
-                    $$ = support.newOrNode($1, $3);
+                    $$ = support.newOrNode(lexer, $1, $3);
                 }
                 | keyword_defined opt_nl arg {
                     $$ = new DefinedNode($1.intValue(), $3);
@@ -1268,11 +1268,11 @@ relop           : tGT {
                 }
 
 rel_expr        : arg relop arg   %prec tGT {
-                     $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                     $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
 		| rel_expr relop arg   %prec tGT {
                      support.warning(ID.MISCELLANEOUS, lexer.getLine(), "comparison '" + $2 + "' after comparison");
-                     $$ = support.getOperatorCallNode($1, $2, $3, lexer.getLine());
+                     $$ = support.getOperatorCallNode(lexer, $1, $2, $3, lexer.getLine());
                 }
 // [!null]
 arg_value       : arg {
@@ -1495,10 +1495,10 @@ primary         : literal
                     $$ = new DefinedNode($1.intValue(), $4);
                 }
                 | keyword_not tLPAREN2 expr rparen {
-                    $$ = support.getOperatorCallNode(support.getConditionNode($3), lexer.BANG);
+                    $$ = support.getOperatorCallNode(lexer, support.getConditionNode($3), lexer.BANG);
                 }
                 | keyword_not tLPAREN2 rparen {
-                    $$ = support.getOperatorCallNode(NilImplicitNode.NIL, lexer.BANG);
+                    $$ = support.getOperatorCallNode(lexer, NilImplicitNode.NIL, lexer.BANG);
                 }
                 | fcall brace_block {
                     support.frobnicate_fcall_args($1, null, $2);
@@ -1976,7 +1976,7 @@ cases           : opt_else | case_body
 opt_rescue      : keyword_rescue exc_list exc_var then compstmt opt_rescue {
                     Node node;
                     if ($3 != null) {
-                        node = support.appendToBlock(support.node_assign($3, new GlobalVarNode($1, support.symbolID(lexer.DOLLAR_BANG))), $5);
+                        node = support.appendToBlock(lexer, support.node_assign($3, new GlobalVarNode($1, support.symbolID(lexer.DOLLAR_BANG))), $5);
                         if ($5 != null) {
                             node.setLine($1.intValue());
                         }
@@ -2569,14 +2569,14 @@ f_block_optarg  : f_block_opt {
                     $$ = new BlockNode($1.getLine()).add($1);
                 }
                 | f_block_optarg ',' f_block_opt {
-                    $$ = support.appendToBlock($1, $3);
+                    $$ = support.appendToBlock(lexer, $1, $3);
                 }
 
 f_optarg        : f_opt {
                     $$ = new BlockNode($1.getLine()).add($1);
                 }
                 | f_optarg ',' f_opt {
-                    $$ = support.appendToBlock($1, $3);
+                    $$ = support.appendToBlock(lexer, $1, $3);
                 }
 
 restarg_mark    : tSTAR2 {

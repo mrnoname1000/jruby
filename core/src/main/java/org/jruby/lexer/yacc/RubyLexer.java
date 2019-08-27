@@ -2422,4 +2422,12 @@ public class RubyLexer extends LexingCommon {
 
         return hexValue;
     }
+
+    public IRubyWarnings getWarnings() {
+        return warnings;
+    }
+
+    public Ruby getRuntime() {
+        return parserSupport.getConfiguration().getRuntime();
+    }
 }
