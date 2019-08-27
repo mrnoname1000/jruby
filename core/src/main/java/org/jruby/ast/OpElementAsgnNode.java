@@ -36,11 +36,8 @@ import java.util.List;
 
 import org.jruby.RubySymbol;
 import org.jruby.ast.visitor.NodeVisitor;
-import org.jruby.lexer.LexingCommon;
-import org.jruby.lexer.yacc.ISourcePosition;
 import org.jruby.util.ByteList;
 import org.jruby.util.CommonByteLists;
-import org.jruby.util.StringSupport;
 
 /** Represents an operator assignment to an element.
  * 
@@ -57,10 +54,9 @@ public class OpElementAsgnNode extends Node {
     private final Node valueNode;
     private final RubySymbol operatorName;
 
-    public OpElementAsgnNode(ISourcePosition position, Node receiverNode, RubySymbol operatorName, Node argsNode, Node valueNode) {
-        super(position, receiverNode.containsVariableAssignment() || argsNode != null && argsNode.containsVariableAssignment() || valueNode.containsVariableAssignment());
+    public OpElementAsgnNode(int line, Node receiverNode, RubySymbol operatorName, Node argsNode, Node valueNode) {
+        super(line, receiverNode.containsVariableAssignment() || argsNode != null && argsNode.containsVariableAssignment() || valueNode.containsVariableAssignment());
         
-        assert receiverNode != null : "receiverNode is not null";
         assert valueNode != null : "valueNode is not null";
         
         this.receiverNode = receiverNode;

@@ -36,7 +36,6 @@ package org.jruby.ast;
 import java.util.List;
 
 import org.jruby.ast.visitor.NodeVisitor;
-import org.jruby.lexer.yacc.ISourcePosition;
 
 /**
  * A Range in a boolean expression (named after a FlipFlop component in electronic?).
@@ -49,11 +48,8 @@ public class FlipNode extends Node {
     // is what index in the right scope to set the value.
     private final int location;
     
-    public FlipNode(ISourcePosition position, Node beginNode, Node endNode, boolean exclusive, int location) {
-        super(position, beginNode.containsVariableAssignment() || endNode.containsVariableAssignment());
-        
-        assert beginNode != null : "beginNode is not null";
-        assert endNode != null : "endNode is not null";
+    public FlipNode(int line, Node beginNode, Node endNode, boolean exclusive, int location) {
+        super(line, beginNode.containsVariableAssignment() || endNode.containsVariableAssignment());
         
         this.beginNode = beginNode;
         this.endNode = endNode;

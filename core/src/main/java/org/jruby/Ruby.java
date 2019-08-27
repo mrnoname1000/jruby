@@ -67,7 +67,6 @@ import org.jruby.javasupport.JavaClass;
 import org.jruby.javasupport.JavaPackage;
 import org.jruby.javasupport.JavaSupport;
 import org.jruby.javasupport.JavaSupportImpl;
-import org.jruby.lexer.yacc.ISourcePosition;
 import org.jruby.management.Caches;
 import org.jruby.parser.StaticScope;
 import org.jruby.runtime.JavaSites;
@@ -724,7 +723,7 @@ public final class Ruby implements Constantizable {
 
     // Modifies incoming source for -n, -p, and -F
     private RootNode addGetsLoop(RootNode oldRoot, boolean printing, boolean processLineEndings, boolean split) {
-        ISourcePosition pos = oldRoot.getPosition();
+        int pos = oldRoot.getLine();
         BlockNode newBody = new BlockNode(pos);
         RubySymbol dollarSlash = newSymbol(CommonByteLists.DOLLAR_SLASH);
         newBody.add(new GlobalAsgnNode(pos, dollarSlash, new StrNode(pos, ((RubyString) globalVariables.get("$/")).getByteList())));
@@ -745,7 +744,7 @@ public final class Ruby implements Constantizable {
             whileBody.add(oldRoot.getBodyNode());
         }
 
-        if (printing) whileBody.add(new FCallNode(pos, newSymbol("puts"), new ArrayNode(pos, dollarUnderscore), null));
+        if (printing) whileBody.add(new FCallNode(pos, newSymbol("puts"), new ArrayNode(dollarUnderscore), null));
 
         return new RootNode(pos, oldRoot.getScope(), newBody, oldRoot.getFile());
     }

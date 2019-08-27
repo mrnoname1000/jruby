@@ -61,8 +61,8 @@ public abstract class Node implements ISourcePositionHolder, ISourcePosition {
     protected boolean containsVariableAssignment;
     protected boolean newline;
 
-    public Node(ISourcePosition position, boolean containsAssignment) {
-        this.line = position.getLine();
+    public Node(int line, boolean containsAssignment) {
+        this.line = line;
         this.containsVariableAssignment = containsAssignment;
     }
 
@@ -83,6 +83,10 @@ public abstract class Node implements ISourcePositionHolder, ISourcePosition {
 
     public int getLine() {
         return line;
+    }
+
+    public void setLine(int line) {
+        this.line = line;
     }
 
     public String getFile() {

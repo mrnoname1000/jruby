@@ -30,15 +30,14 @@ package org.jruby.ast;
 
 import java.util.List;
 import org.jruby.ast.visitor.NodeVisitor;
-import org.jruby.lexer.yacc.ISourcePosition;
 import org.jruby.parser.StaticScope;
 
 /**
  * Stubby lambda node (1.9 only)
  */
 public class LambdaNode extends IterNode {
-    public LambdaNode(ISourcePosition position, ArgsNode args, Node body, StaticScope scope) {
-        super(position, args, body, scope);
+    public LambdaNode(int line, ArgsNode args, Node body, StaticScope scope) {
+        super(line, args, body, scope);
     }
 
     @Override

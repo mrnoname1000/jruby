@@ -75,7 +75,7 @@ public class RubyLexer extends LexingCommon {
     private static final HashMap<String, Keyword> map;
 
     static {
-        map = new HashMap<String, Keyword>();
+        map = new HashMap<>();
 
         map.put("end", Keyword.END);
         map.put("else", Keyword.ELSE);
@@ -121,27 +121,27 @@ public class RubyLexer extends LexingCommon {
     }
 
     private BignumNode newBignumNode(String value, int radix) {
-        return new BignumNode(getPosition(), new BigInteger(value, radix));
+        return new BignumNode(ruby_sourceline, new BigInteger(value, radix));
     }
 
     private FixnumNode newFixnumNode(String value, int radix) throws NumberFormatException {
-        return new FixnumNode(getPosition(), Long.parseLong(value, radix));
+        return new FixnumNode(ruby_sourceline, Long.parseLong(value, radix));
     }
     
     private RationalNode newRationalNode(String value, int radix) throws NumberFormatException {
         NumericNode numerator;
 
         try {
-            numerator = new FixnumNode(getPosition(), Long.parseLong(value, radix));
+            numerator = new FixnumNode(ruby_sourceline, Long.parseLong(value, radix));
         } catch (NumberFormatException e) {
-            numerator = new BignumNode(getPosition(), new BigInteger(value, radix));
+            numerator = new BignumNode(ruby_sourceline, new BigInteger(value, radix));
         }
 
-        return new RationalNode(getPosition(), numerator, new FixnumNode(getPosition(), 1));
+        return new RationalNode(ruby_sourceline, numerator, new FixnumNode(ruby_sourceline, 1));
     }
     
     private ComplexNode newComplexNode(NumericNode number) {
-        return new ComplexNode(getPosition(), number);
+        return new ComplexNode(ruby_sourceline, number);
     }
     
     protected void ambiguousOperator(String op, String syn) {
@@ -211,7 +211,7 @@ public class RubyLexer extends LexingCommon {
     private static final Map<ByteList, Keyword> byteList2Keyword;
 
     static {
-        byteList2Keyword = new HashMap<ByteList, Keyword>();
+        byteList2Keyword = new HashMap<>();
 
         byteList2Keyword.put(Keyword.END.bytes, Keyword.END);
         byteList2Keyword.put(Keyword.ELSE.bytes, Keyword.ELSE);
@@ -257,7 +257,7 @@ public class RubyLexer extends LexingCommon {
     }
 
     public static Keyword getKeyword(ByteList str) {
-        return (Keyword) byteList2Keyword.get(str);
+        return byteList2Keyword.get(str);
     }
 
     public static Keyword getKeyword(String str) {
@@ -265,7 +265,7 @@ public class RubyLexer extends LexingCommon {
     }
     
     // Used for tiny smidgen of grammar in lexer (see setParserSupport())
-    private ParserSupport parserSupport = null;
+    private ParserSupport parserSupport;
 
     // What handles warnings
     private IRubyWarnings warnings;
@@ -407,14 +407,6 @@ public class RubyLexer extends LexingCommon {
         return token == EOF ? 0 : token;
     }
 
-    public ISourcePosition getPosition(ISourcePosition startPosition) {
-        if (startPosition != null) return startPosition;
-
-        if (tokline != null && ruby_sourceline == tokline.getLine()) return tokline;
-
-        return new SimpleSourcePosition(getFile(), ruby_sourceline);
-    }
-
     /**
      * Parse must pass its support object for some check at bottom of
      * yylex().  Ruby does it this way as well (i.e. a little parsing
@@ -519,8 +511,8 @@ public class RubyLexer extends LexingCommon {
             BigDecimal numerator = bd.multiply(denominator);
 
             try {
-                yaccValue = new RationalNode(getPosition(), new FixnumNode(getPosition(), numerator.longValueExact()),
-                        new FixnumNode(getPosition(), denominator.longValueExact()));
+                yaccValue = new RationalNode(ruby_sourceline, new FixnumNode(ruby_sourceline, numerator.longValueExact()),
+                        new FixnumNode(ruby_sourceline, denominator.longValueExact()));
             } catch (ArithmeticException ae) {
                 // FIXME: Rational supports Bignum numerator and denominator
                 compile_error(PID.RATIONAL_OUT_OF_RANGE, "Rational (" + numerator + "/" + denominator + ") out of range.");
@@ -536,7 +528,7 @@ public class RubyLexer extends LexingCommon {
 
             d = number.startsWith("-") ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
         }
-        yaccValue = new FloatNode(getPosition(), d);
+        yaccValue = new FloatNode(ruby_sourceline, d);
         return considerComplex(RubyParser.tFLOAT, suffix);
     }
 
@@ -573,7 +565,7 @@ public class RubyLexer extends LexingCommon {
             }
         }
 
-        StrNode newStr = new StrNode(getPosition(), buffer, codeRange);
+        StrNode newStr = new StrNode(ruby_sourceline, buffer, codeRange);
 
         if (parserSupport.getConfiguration().isFrozenStringLiteral()) newStr.setFrozen(true);
 
@@ -752,7 +744,7 @@ public class RubyLexer extends LexingCommon {
      *
      */
     private void printToken(int token) {
-        //System.out.print("LOC: " + support.getPosition() + " ~ ");
+        //System.out.print("LOC: " + ruby_sourceline + " ~ ");
 
         switch (token) {
             case RubyParser.yyErrorCode: System.err.print("yyErrorCode,"); break;
@@ -884,7 +876,6 @@ public class RubyLexer extends LexingCommon {
                 /* white spaces */
             case ' ': case '\t': case '\f': case '\r':
             case '\13': /* '\v' */
-                getPosition();
                 spaceSeen = true;
                 continue;
             case '#': {	/* it's a comment */
@@ -935,7 +926,6 @@ public class RubyLexer extends LexingCommon {
                 if (c == -1) return EOF;
 
                 pushback(c);
-                getPosition();
 
                 commandStart = true;
                 setState(EXPR_BEG);
@@ -1118,13 +1108,9 @@ public class RubyLexer extends LexingCommon {
         }
         pushback(c);
         
-        //tmpPosition is required because getPosition()'s side effects.
-        //if the warning is generated, the getPosition() on line 954 (this line + 18) will create
-        //a wrong position if the "inclusive" flag is not set.
-        ISourcePosition tmpPosition = getPosition();
         if (isSpaceArg(c, spaceSeen)) {
             if (warnings.isVerbose() && Options.PARSER_WARN_ARGUMENT_PREFIX.load())
-                warnings.warning(ID.ARGUMENT_AS_PREFIX, getFile(), tmpPosition.getLine(), "`&' interpreted as argument prefix");
+                warnings.warning(ID.ARGUMENT_AS_PREFIX, getFile(), ruby_sourceline, "`&' interpreted as argument prefix");
             c = RubyParser.tAMPER;
         } else if (isBEG()) {
             c = RubyParser.tAMPER;
@@ -1361,7 +1347,7 @@ public class RubyLexer extends LexingCommon {
                 return RubyParser.tGVAR;
             }
             
-            yaccValue = new BackRefNode(getPosition(), c);
+            yaccValue = new BackRefNode(ruby_sourceline, c);
             return RubyParser.tBACK_REF;
 
         case '1': case '2': case '3': case '4': case '5': case '6':
@@ -1385,7 +1371,7 @@ public class RubyLexer extends LexingCommon {
                 ref = 0;
             }
 
-            yaccValue = new NthRefNode(getPosition(), ref);
+            yaccValue = new NthRefNode(ruby_sourceline, ref);
             return RubyParser.tNTH_REF;
         case '0':
             return identifierToken(RubyParser.tGVAR, new ByteList(new byte[] {'$', (byte) c}));
@@ -1543,7 +1529,7 @@ public class RubyLexer extends LexingCommon {
                     yaccValue = keyword.bytes;
                     return keyword.id0;
                 } else {
-                    yaccValue = getPosition();
+                    yaccValue = ruby_sourceline;
                 }
 
                 if (isLexState(lex_state, EXPR_BEG)) commandStart = true;
@@ -1627,7 +1613,7 @@ public class RubyLexer extends LexingCommon {
         cmdArgumentState.stop();
         setState(c == RubyParser.tLBRACE_ARG ? EXPR_BEG : EXPR_BEG|EXPR_LABEL);
         if (c != RubyParser.tLBRACE) commandStart = true;
-        yaccValue = getPosition();
+        yaccValue = ruby_sourceline;
 
         return c;
     }
@@ -1648,7 +1634,7 @@ public class RubyLexer extends LexingCommon {
         cmdArgumentState.stop();
         setState(EXPR_BEG|EXPR_LABEL);
         
-        yaccValue = getPosition();
+        yaccValue = ruby_sourceline;
         return result;
     }
     
@@ -1889,7 +1875,7 @@ public class RubyLexer extends LexingCommon {
                 }
                 
                 setState(EXPR_END);
-                yaccValue = new StrNode(getPosition(), oneCharBL);
+                yaccValue = new StrNode(ruby_sourceline, oneCharBL);
                 
                 return RubyParser.tCHAR;
             } else {
@@ -1902,7 +1888,7 @@ public class RubyLexer extends LexingCommon {
         ByteList oneCharBL = new ByteList(1);
         oneCharBL.setEncoding(getEncoding());
         oneCharBL.append(c);
-        yaccValue = new StrNode(getPosition(), oneCharBL);
+        yaccValue = new StrNode(ruby_sourceline, oneCharBL);
         setState(EXPR_END);
         return RubyParser.tCHAR;
     }

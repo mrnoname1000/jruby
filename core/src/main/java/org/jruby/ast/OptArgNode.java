@@ -1,4 +1,5 @@
-/***** BEGIN LICENSE BLOCK *****
+/*
+ ****** BEGIN LICENSE BLOCK *****
  * Version: EPL 2.0/GPL 2.0/LGPL 2.1
  *
  * The contents of this file are subject to the Eclipse Public
@@ -33,7 +34,6 @@ import java.util.List;
 import org.jruby.RubySymbol;
 import org.jruby.ast.types.INameNode;
 import org.jruby.ast.visitor.NodeVisitor;
-import org.jruby.lexer.yacc.ISourcePosition;
 
 /**
  *
@@ -42,8 +42,8 @@ import org.jruby.lexer.yacc.ISourcePosition;
 public class OptArgNode extends Node implements INameNode {
     private Node value;
 
-    public OptArgNode(ISourcePosition position, Node value) {
-        super(position, value != null && value.containsVariableAssignment());
+    public OptArgNode(int line, Node value) {
+        super(line, value != null && value.containsVariableAssignment());
         this.value = value;
     }
 

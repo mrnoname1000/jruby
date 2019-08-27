@@ -37,7 +37,6 @@ package org.jruby.ast;
 import java.util.List;
 
 import org.jruby.ast.visitor.NodeVisitor;
-import org.jruby.lexer.yacc.ISourcePosition;
 import org.jruby.runtime.Helpers;
 
 /**
@@ -66,17 +65,17 @@ public class ArgsNode extends Node {
     /**
      * Construct a new ArgsNode with no keyword arguments.
      */
-    public ArgsNode(ISourcePosition position, ListNode pre, ListNode optionalArguments,
+    public ArgsNode(int line, ListNode pre, ListNode optionalArguments,
                     RestArgNode rest, ListNode post, BlockArgNode blockArgNode) {
-        this(position, pre, optionalArguments, rest, post, null, null, blockArgNode);
+        this(line, pre, optionalArguments, rest, post, null, null, blockArgNode);
     }
 
     /**
      * Construct a new ArgsNode with keyword arguments.
      */
-    public ArgsNode(ISourcePosition position, ListNode pre, ListNode optionalArguments,
+    public ArgsNode(int line, ListNode pre, ListNode optionalArguments,
             RestArgNode rest, ListNode post, ListNode keywords, KeywordRestArgNode keyRest, BlockArgNode blockArgNode) {
-        super(position, pre != null && pre.containsVariableAssignment() ||
+        super(line, pre != null && pre.containsVariableAssignment() ||
                         optionalArguments != null && optionalArguments.containsVariableAssignment() ||
                         rest != null && rest.containsVariableAssignment() ||
                         post != null && post.containsVariableAssignment() ||
@@ -161,7 +160,7 @@ public class ArgsNode extends Node {
      * Gets the required arguments at the beginning of the argument definition
      */
     public ListNode getPre() {
-        return new ListNode(getPosition()).addAll(args, 0, getPreCount());
+        return new ListNode(getLine()).addAll(args, 0, getPreCount());
     }
 
     public int getRequiredArgsCount() {
@@ -173,7 +172,7 @@ public class ArgsNode extends Node {
     }
 
     public ListNode getPost() {
-        return new ListNode(getPosition()).addAll(args, postIndex, getPostCount());
+        return new ListNode(getLine()).addAll(args, postIndex, getPostCount());
     }
 
     public int getMaxArgumentsCount() {
@@ -185,7 +184,7 @@ public class ArgsNode extends Node {
      * @return Returns a ListNode
      */
     public ListNode getOptArgs() {
-        return new ListNode(getPosition()).addAll(args, optIndex, getOptionalArgsCount());
+        return new ListNode(getLine()).addAll(args, optIndex, getOptionalArgsCount());
     }
 
     /**
@@ -214,7 +213,7 @@ public class ArgsNode extends Node {
     }
 
     public ListNode getKeywords() {
-        return new ListNode(getPosition()).addAll(args, keywordsIndex, getKeywordCount());
+        return new ListNode(getLine()).addAll(args, keywordsIndex, getKeywordCount());
     }
 
     public KeywordRestArgNode getKeyRest() {

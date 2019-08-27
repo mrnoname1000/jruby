@@ -35,20 +35,17 @@ package org.jruby.ast;
 
 import org.jruby.ast.types.ILiteralNode;
 import org.jruby.ast.visitor.NodeVisitor;
-import org.jruby.lexer.yacc.ISourcePosition;
 
 /**
  * Represents an array. This could be an array literal, quoted words or some args stuff.
  */
 public class ArrayNode extends ListNode implements ILiteralNode {
-    public ArrayNode(ISourcePosition position, Node firstNode) {
-        super(position, firstNode);
-        
-        assert firstNode != null : "ArrayNode.first == null";
+    public ArrayNode(Node firstNode) {
+        super(firstNode.getLine(), firstNode);
     }
 
-    public ArrayNode(ISourcePosition position) {
-        super(position);
+    public ArrayNode(int line) {
+        super(line);
     }
 
     public NodeType getNodeType() {

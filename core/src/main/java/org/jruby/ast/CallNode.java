@@ -50,9 +50,9 @@ public class CallNode extends Node implements INameNode, IArgumentNode, BlockAcc
     private RubySymbol name;
     private final boolean isLazy;
 
-    public CallNode(ISourcePosition position, Node receiverNode, RubySymbol name, Node argsNode,
+    public CallNode(int line, Node receiverNode, RubySymbol name, Node argsNode,
                     Node iterNode, boolean isLazy) {
-        super(position, receiverNode.containsVariableAssignment() ||
+        super(line, receiverNode.containsVariableAssignment() ||
                 argsNode != null && argsNode.containsVariableAssignment() ||
                 iterNode != null && iterNode.containsVariableAssignment());
 

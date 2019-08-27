@@ -8,18 +8,15 @@ package org.jruby.ast;
 
 import java.util.List;
 import org.jruby.ast.visitor.NodeVisitor;
-import org.jruby.lexer.yacc.ISourcePosition;
 
 /**
- *
- * @author enebo
  */
 public class RationalNode extends NumericNode implements SideEffectFree {
     private final NumericNode numerator;
     private final NumericNode denominator;
 
-    public RationalNode(ISourcePosition position, NumericNode numerator, NumericNode denominator) {
-        super(position);
+    public RationalNode(int line, NumericNode numerator, NumericNode denominator) {
+        super(line);
 
         this.numerator = numerator;
         this.denominator = denominator;
@@ -32,7 +29,7 @@ public class RationalNode extends NumericNode implements SideEffectFree {
 
     @Override
     public NumericNode negate() {
-        return new RationalNode(getPosition(), numerator.negate(), denominator);
+        return new RationalNode(getLine(), numerator.negate(), denominator);
     }
 
     @Override

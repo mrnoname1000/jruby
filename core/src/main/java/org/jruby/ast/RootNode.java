@@ -33,7 +33,6 @@ import java.util.List;
 
 import org.jruby.ParseResult;
 import org.jruby.ast.visitor.NodeVisitor;
-import org.jruby.lexer.yacc.ISourcePosition;
 import org.jruby.parser.StaticScope;
 import org.jruby.runtime.DynamicScope;
 
@@ -53,12 +52,12 @@ public class RootNode extends Node implements ParseResult {
     private int endPosition;
     private boolean needsCodeCoverage;
 
-    public RootNode(ISourcePosition position, DynamicScope scope, Node bodyNode, String file) {
-        this(position, scope, bodyNode, file, -1, false);
+    public RootNode(int line, DynamicScope scope, Node bodyNode, String file) {
+        this(line, scope, bodyNode, file, -1, false);
     }
 
-    public RootNode(ISourcePosition position, DynamicScope scope, Node bodyNode, String file, int endPosition, boolean needsCodeCoverage) {
-        super(position, bodyNode.containsVariableAssignment());
+    public RootNode(int line, DynamicScope scope, Node bodyNode, String file, int endPosition, boolean needsCodeCoverage) {
+        super(line, bodyNode.containsVariableAssignment());
         
         this.scope = scope;
         this.staticScope = scope.getStaticScope();
@@ -66,11 +65,6 @@ public class RootNode extends Node implements ParseResult {
         this.file = file;
         this.endPosition = endPosition;
         this.needsCodeCoverage = needsCodeCoverage;
-    }
-
-    @Deprecated
-    public RootNode(ISourcePosition position, DynamicScope scope, Node bodyNode, String file, int endPosition) {
-        this(position, scope, bodyNode, file, endPosition, false);
     }
 
     public NodeType getNodeType() {

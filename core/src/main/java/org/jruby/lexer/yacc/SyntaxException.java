@@ -115,11 +115,6 @@ public class SyntaxException extends RuntimeException {
         return message;
     }
 
-    @Deprecated
-    public ISourcePosition getPosition() {
-        return new SimpleSourcePosition(file, line);
-    }
-
     public String getFile() {
         return file;
     }
