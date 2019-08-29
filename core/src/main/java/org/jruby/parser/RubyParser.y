@@ -419,10 +419,10 @@ stmt            : keyword_alias fitem {
                     $$ = support.newAlias($1.intValue(), $2, $4);
                 }
                 | keyword_alias tGVAR tGVAR {
-                    $$ = new VAliasNode($1.intValue(), support.symbolID($2), support.symbolID($3));
+                    $$ = new VAliasNode($1.intValue(), support.symbolID(lexer, $2), support.symbolID(lexer, $3));
                 }
                 | keyword_alias tGVAR tBACK_REF {
-                    $$ = new VAliasNode($1.intValue(), support.symbolID($2), support.symbolID($<BackRefNode>3.getByteName()));
+                    $$ = new VAliasNode($1.intValue(), support.symbolID(lexer, $2), support.symbolID(lexer, $<BackRefNode>3.getByteName()));
                 }
                 | keyword_alias tGVAR tNTH_REF {
                     support.yyerror("can't make alias for the number variables");
@@ -680,17 +680,17 @@ mlhs_node       : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = support.assignableLabelOrIdentifier($1, null);
                 }
                 | tIVAR {
-                   $$ = new InstAsgnNode(lexer.tokline, support.symbolID($1), NilImplicitNode.NIL);
+                   $$ = new InstAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
                 }
                 | tGVAR {
-                   $$ = new GlobalAsgnNode(lexer.tokline, support.symbolID($1), NilImplicitNode.NIL);
+                   $$ = new GlobalAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
                 }
                 | tCONSTANT {
                     if (support.isInDef()) support.compile_error("dynamic constant assignment");
-                    $$ = new ConstDeclNode(lexer.tokline, support.symbolID($1));
+                    $$ = new ConstDeclNode(lexer.tokline, support.symbolID(lexer, $1));
                 }
                 | tCVAR {
-                    $$ = new ClassVarAsgnNode(lexer.tokline, support.symbolID($1), NilImplicitNode.NIL);
+                    $$ = new ClassVarAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
                 } /*mri:user_variable*/
                 | /*mri:keyword_variable*/ keyword_nil {
                     support.compile_error("Can't assign to nil");
@@ -753,18 +753,18 @@ lhs             : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = support.assignableLabelOrIdentifier($1, null);
                 }
                 | tIVAR {
-                    $$ = new InstAsgnNode(lexer.tokline, support.symbolID($1), NilImplicitNode.NIL);
+                    $$ = new InstAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
                 }
                 | tGVAR {
-                    $$ = new GlobalAsgnNode(lexer.tokline, support.symbolID($1), NilImplicitNode.NIL);
+                    $$ = new GlobalAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
                 }
                 | tCONSTANT {
                     if (support.isInDef()) support.compile_error("dynamic constant assignment");
 
-                    $$ = new ConstDeclNode(lexer.tokline, support.symbolID($1));
+                    $$ = new ConstDeclNode(lexer.tokline, support.symbolID(lexer, $1));
                 }
                 | tCVAR {
-                    $$ = new ClassVarAsgnNode(lexer.tokline, support.symbolID($1), NilImplicitNode.NIL);
+                    $$ = new ClassVarAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
                 } /*mri:user_variable*/
                 | /*mri:keyword_variable*/ keyword_nil {
                     support.compile_error("Can't assign to nil");
@@ -862,10 +862,10 @@ fname          : tIDENTIFIER {
 
 // LiteralNode:fsym
 fsym           : fname {
-                   $$ = new LiteralNode(lexer.getLine(), support.symbolID($1));
+                   $$ = new LiteralNode(lexer.getLine(), support.symbolID(lexer, $1));
                }
                | symbol {
-                   $$ = new LiteralNode(lexer.getLine(), support.symbolID($1));
+                   $$ = new LiteralNode(lexer.getLine(), support.symbolID(lexer, $1));
                }
 
 // Node:fitem
@@ -1143,7 +1143,7 @@ arg             : lhs '=' arg_rhs {
                     $$ = support.newOpConstAsgn(support.new_colon2($1, $3), $4, $5);
                 }
                 | tCOLON3 tCONSTANT tOP_ASGN arg_rhs {
-                    $$ = support.newOpConstAsgn(new Colon3Node(lexer.getLine(), support.symbolID($2)), $3, $4);
+                    $$ = support.newOpConstAsgn(new Colon3Node(lexer.getLine(), support.symbolID(lexer, $2)), $3, $4);
                 }
                 | backref tOP_ASGN arg_rhs {
                     support.backrefAssignError($1);
@@ -1603,7 +1603,7 @@ primary         : literal
                 } f_arglist bodystmt keyword_end {
                     Node body = support.makeNullNil($6);
 
-                    $$ = new DefnNode($1, support.symbolID($2), (ArgsNode) $5, support.getCurrentScope(), body, $7.intValue());
+                    $$ = new DefnNode($1, support.symbolID(lexer, $2), (ArgsNode) $5, support.getCurrentScope(), body, $7.intValue());
                     support.popCurrentScope();
                     support.setInDef($<Boolean>4.booleanValue());
                     lexer.setCurrentArg($<ByteList>3);
@@ -1621,7 +1621,7 @@ primary         : literal
                     Node body = $8;
                     if (body == null) body = NilImplicitNode.NIL;
 
-                    $$ = new DefsNode($1, $2, support.symbolID($5), (ArgsNode) $7, support.getCurrentScope(), body, $9.intValue());
+                    $$ = new DefsNode($1, $2, support.symbolID(lexer, $5), (ArgsNode) $7, support.getCurrentScope(), body, $9.intValue());
                     support.popCurrentScope();
                     support.setInDef($<Boolean>4.booleanValue());
                     lexer.setCurrentArg($<ByteList>6);
@@ -1976,7 +1976,7 @@ cases           : opt_else | case_body
 opt_rescue      : keyword_rescue exc_list exc_var then compstmt opt_rescue {
                     Node node;
                     if ($3 != null) {
-                        node = support.appendToBlock(lexer, support.node_assign($3, new GlobalVarNode($1, support.symbolID(lexer.DOLLAR_BANG))), $5);
+                        node = support.appendToBlock(lexer, support.node_assign($3, new GlobalVarNode($1, support.symbolID(lexer, lexer.DOLLAR_BANG))), $5);
                         if ($5 != null) {
                             node.setLine($1.intValue());
                         }
@@ -2186,13 +2186,13 @@ string_content  : tSTRING_CONTENT {
                 }
 
 string_dvar     : tGVAR {
-                     $$ = new GlobalVarNode(lexer.getLine(), support.symbolID($1));
+                     $$ = new GlobalVarNode(lexer.getLine(), support.symbolID(lexer, $1));
                 }
                 | tIVAR {
-                     $$ = new InstVarNode(lexer.getLine(), support.symbolID($1));
+                     $$ = new InstVarNode(lexer.getLine(), support.symbolID(lexer, $1));
                 }
                 | tCVAR {
-                     $$ = new ClassVarNode(lexer.getLine(), support.symbolID($1));
+                     $$ = new ClassVarNode(lexer.getLine(), support.symbolID(lexer, $1));
                 }
                 | backref
 
@@ -2258,16 +2258,16 @@ var_ref         : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = support.declareIdentifier($1);
                 }
                 | tIVAR {
-                    $$ = new InstVarNode(lexer.tokline, support.symbolID($1));
+                    $$ = new InstVarNode(lexer.tokline, support.symbolID(lexer, $1));
                 }
                 | tGVAR {
-                    $$ = new GlobalVarNode(lexer.tokline, support.symbolID($1));
+                    $$ = new GlobalVarNode(lexer.tokline, support.symbolID(lexer, $1));
                 }
                 | tCONSTANT {
-                    $$ = new ConstNode(lexer.tokline, support.symbolID($1));
+                    $$ = new ConstNode(lexer.tokline, support.symbolID(lexer, $1));
                 }
                 | tCVAR {
-                    $$ = new ClassVarNode(lexer.tokline, support.symbolID($1));
+                    $$ = new ClassVarNode(lexer.tokline, support.symbolID(lexer, $1));
                 } /*mri:user_variable*/
                 | /*mri:keyword_variable*/ keyword_nil { 
                     $$ = new NilNode(lexer.tokline);
@@ -2297,18 +2297,18 @@ var_lhs         : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = support.assignableLabelOrIdentifier($1, null);
                 }
                 | tIVAR {
-                    $$ = new InstAsgnNode(lexer.tokline, support.symbolID($1), NilImplicitNode.NIL);
+                    $$ = new InstAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
                 }
                 | tGVAR {
-                    $$ = new GlobalAsgnNode(lexer.tokline, support.symbolID($1), NilImplicitNode.NIL);
+                    $$ = new GlobalAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
                 }
                 | tCONSTANT {
                     if (support.isInDef()) support.compile_error("dynamic constant assignment");
 
-                    $$ = new ConstDeclNode(lexer.tokline, support.symbolID($1));
+                    $$ = new ConstDeclNode(lexer.tokline, support.symbolID(lexer, $1));
                 }
                 | tCVAR {
-                    $$ = new ClassVarAsgnNode(lexer.tokline, support.symbolID($1), NilImplicitNode.NIL);
+                    $$ = new ClassVarAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
                 } /*mri:user_variable*/
                 | /*mri:keyword_variable*/ keyword_nil {
                     support.compile_error("Can't assign to nil");
@@ -2596,7 +2596,7 @@ f_rest_arg      : restarg_mark tIDENTIFIER {
                 }
                 | restarg_mark {
   // FIXME: bytelist_love: somewhat silly to remake the empty bytelist over and over but this type should change (using null vs "" is a strange distinction).
-  $$ = new UnnamedRestArgNode(lexer.getLine(), support.symbolID(CommonByteLists.EMPTY), support.getCurrentScope().addVariable("*"));
+  $$ = new UnnamedRestArgNode(lexer.getLine(), support.symbolID(lexer, CommonByteLists.EMPTY), support.getCurrentScope().addVariable("*"));
                 }
 
 // [!null]

@@ -52,7 +52,6 @@ import org.jruby.common.IRubyWarnings;
 import org.jruby.common.IRubyWarnings.ID;
 import org.jruby.ext.coverage.CoverageData;
 import org.jruby.lexer.yacc.ISourcePosition;
-import org.jruby.lexer.yacc.ISourcePositionHolder;
 import org.jruby.lexer.yacc.RubyLexer;
 import org.jruby.lexer.yacc.SyntaxException.PID;
 import org.jruby.runtime.DynamicScope;
@@ -170,17 +169,17 @@ public class ParserSupport {
             warnings.warn(ID.AMBIGUOUS_ARGUMENT, lexer.getFile(), lexer.getLine(), "circular argument reference - " + name);
         }
 
-        return currentScope.declare(lexer.tokline, symbolID(name));
+        return currentScope.declare(lexer.tokline, symbolID(lexer, name));
     }
 
     // We know it has to be tLABEL or tIDENTIFIER so none of the other assignable logic is needed
     public AssignableNode assignableLabelOrIdentifier(ByteList name, Node value) {
-        return currentScope.assign(lexer.getLine(), symbolID(name), makeNullNil(value));
+        return currentScope.assign(lexer.getLine(), symbolID(lexer, name), makeNullNil(value));
     }
 
     // We know it has to be tLABEL or tIDENTIFIER so none of the other assignable logic is needed
     public AssignableNode assignableKeyword(ByteList name, Node value) {
-        return currentScope.assignKeyword(lexer.getLine(), symbolID(name), makeNullNil(value));
+        return currentScope.assignKeyword(lexer.getLine(), symbolID(lexer, name), makeNullNil(value));
     }
     
     protected void getterIdentifierError(RubySymbol identifier) {
@@ -255,7 +254,7 @@ public class ParserSupport {
 
     // We know it has to be tLABEL or tIDENTIFIER so none of the other assignable logic is needed
     public AssignableNode assignableInCurr(ByteList nameBytes, Node value) {
-        RubySymbol name = symbolID(nameBytes);
+        RubySymbol name = symbolID(lexer, nameBytes);
         currentScope.addVariableThisScope(name.idString());
         return currentScope.assign(lexer.getLine(), name, makeNullNil(value));
     }
@@ -325,12 +324,11 @@ public class ParserSupport {
      * @return an AttrAssignNode
      */
     public Node attrset(Node receiver, ByteList name) {
-        return attrset(receiver, lexer.DOT, name);
+        return attrset(receiver, DOT, name);
     }
 
     public Node attrset(Node receiver, ByteList callType, ByteList name) {
-        checkExpression(receiver);
-
+        value_expr(lexer, receiver);
 
         return new_attrassign(receiver, name.append('='), null, isLazy(callType));
     }
@@ -456,11 +454,6 @@ public class ParserSupport {
         }
 
         return true;
-    }
-
-    @Deprecated
-    public boolean checkExpression(Node node) {
-        return value_expr(lexer, node);
     }
     
     /**
@@ -638,7 +631,7 @@ public class ParserSupport {
         case DREGEXPNODE: {
             int line = node.getLine();
 
-            return new Match2Node(line, node, new GlobalVarNode(line, symbolID(DOLLAR_UNDERSCORE)));
+            return new Match2Node(line, node, new GlobalVarNode(line, symbolID(lexer, DOLLAR_UNDERSCORE)));
         }
         case ANDNODE:
             leftNode = cond0(((AndNode) node).getFirstNode());
@@ -656,7 +649,7 @@ public class ParserSupport {
             
             ByteList label = new ByteList(new byte[] {'F', 'L', 'I', 'P'}, USASCII_ENCODING);
             label.append(Long.toString(node.hashCode()).getBytes());
-            RubySymbol symbolID = symbolID(label);
+            RubySymbol symbolID = symbolID(lexer, label);
 
             return new FlipNode(node.getLine(),
                     getFlipConditionNode(((DotNode) node).getBeginNode()),
@@ -690,7 +683,7 @@ public class ParserSupport {
 
         if (node instanceof FixnumNode) {
             warnUnlessEOption(ID.LITERAL_IN_CONDITIONAL_RANGE, node, "integer literal in conditional range");
-            return getOperatorCallNode(lexer, node, lexer.EQ_EQ, new GlobalVarNode(node.getLine(), symbolID(lexer.DOLLAR_DOT)));
+            return getOperatorCallNode(lexer, node, EQ_EQ, new GlobalVarNode(node.getLine(), symbolID(lexer, DOLLAR_DOT)));
         } 
 
         return node;
@@ -817,7 +810,7 @@ public class ParserSupport {
 
         int line = lexer.tokline;
 
-        Node newNode = new OpElementAsgnNode(line, receiverNode, symbolID(operatorName), argsNode, valueNode);
+        Node newNode = new OpElementAsgnNode(line, receiverNode, symbolID(lexer, operatorName), argsNode, valueNode);
 
         fixpos(newNode, receiverNode);
 
@@ -828,30 +821,22 @@ public class ParserSupport {
         return RubySymbol.newIDSymbol(lexer.getRuntime(), identifierValue);
     }
 
-    public RubySymbol symbolID(ByteList identifierValue) {
-        return RubySymbol.newIDSymbol(lexer.getRuntime(), identifierValue);
-    }
-
     public Node newOpAsgn(Node receiverNode, ByteList callType, Node valueNode, ByteList variableName, ByteList operatorName) {
         value_expr(lexer, valueNode);
 
-        return new OpAsgnNode(getLine(receiverNode), receiverNode, valueNode, symbolID(variableName), symbolID(operatorName), isLazy(callType));
+        return new OpAsgnNode(getLine(receiverNode), receiverNode, valueNode, symbolID(lexer, variableName), symbolID(lexer, operatorName), isLazy(callType));
     }
 
     public Node newOpConstAsgn(Node lhs, ByteList operatorName, Node rhs) {
-        return new OpAsgnConstDeclNode(lhs, symbolID(operatorName), rhs);
+        return new OpAsgnConstDeclNode(lhs, symbolID(lexer, operatorName), rhs);
     }
 
-    public boolean isLazy(String callType) {
-        return "&.".equals(callType);
-    }
-
-    public boolean isLazy(ByteList callType) {
-        return callType == lexer.AMPERSAND_DOT;
+    private static boolean isLazy(ByteList callType) {
+        return callType == AMPERSAND_DOT;
     }
     
     public Node new_attrassign(Node receiver, ByteList name, Node args, boolean isLazy) {
-        return new AttrAssignNode(receiver, symbolID(name), args, isLazy);
+        return new AttrAssignNode(receiver, symbolID(lexer, name), args, isLazy);
     }
     
     private boolean isNumericOperator(String name) {
@@ -878,27 +863,27 @@ public class ParserSupport {
             if (iter != null) lexer.compile_error(PID.BLOCK_ARG_AND_BLOCK_GIVEN, "Both block arg and actual block given.");
 
             BlockPassNode blockPass = (BlockPassNode) argsNode;
-            return new CallNode(line(receiver, argsNode), receiver, symbolID(name), blockPass.getArgsNode(), blockPass, isLazy(callType));
+            return new CallNode(line(receiver, argsNode), receiver, symbolID(lexer, name), blockPass.getArgsNode(), blockPass, isLazy(callType));
         }
 
-        return new CallNode(line(receiver, argsNode), receiver, symbolID(name), argsNode, iter, isLazy(callType));
+        return new CallNode(line(receiver, argsNode), receiver, symbolID(lexer, name), argsNode, iter, isLazy(callType));
 
     }
 
     public Node new_call(Node receiver, ByteList name, Node argsNode, Node iter) {
-        return new_call(receiver, lexer.DOT, name, argsNode, iter);
+        return new_call(receiver, DOT, name, argsNode, iter);
     }
 
     public Colon2Node new_colon2(Node leftNode, ByteList name) {
         int line = getLine(leftNode);
 
-        if (leftNode == null) return new Colon2ImplicitNode(line, symbolID(name));
+        if (leftNode == null) return new Colon2ImplicitNode(line, symbolID(lexer, name));
 
-        return new Colon2ConstNode(line, leftNode, symbolID(name));
+        return new Colon2ConstNode(line, leftNode, symbolID(lexer, name));
     }
 
     public Colon3Node new_colon3(ByteList name) {
-        return new Colon3Node(lexer.tokline, symbolID(name));
+        return new Colon3Node(lexer.tokline, symbolID(lexer, name));
     }
 
     public void frobnicate_fcall_args(FCallNode fcall, Node args, Node iter) {
@@ -921,7 +906,7 @@ public class ParserSupport {
     }
 
     public Node new_fcall(ByteList operation) {
-        return new FCallNode(lexer.tokline, symbolID(operation));
+        return new FCallNode(lexer.tokline, symbolID(lexer, operation));
     }
 
     public Node new_super(int line, Node args) {
@@ -1012,12 +997,12 @@ public class ParserSupport {
     }
 
     public Node asSymbol(int line, ByteList value) {
-        return new SymbolNode(line, symbolID(value));
+        return new SymbolNode(line, symbolID(lexer, value));
     }
 
         
     public Node asSymbol(int line, Node value) {
-        return value instanceof StrNode ? new SymbolNode(line, symbolID(((StrNode) value).getValue())) :
+        return value instanceof StrNode ? new SymbolNode(line, symbolID(lexer, ((StrNode) value).getValue())) :
                 new DSymbolNode(line, (DStrNode) value);
     }
     
@@ -1159,7 +1144,7 @@ public class ParserSupport {
                                         ByteList keywordRestArgName, BlockArgNode blockArg) {
         if (keywordRestArgName == null) return new ArgsTailHolder(line, keywordArg, null, blockArg);
 
-        RubySymbol restKwargsName = symbolID(keywordRestArgName);
+        RubySymbol restKwargsName = symbolID(lexer, keywordRestArgName);
         String id = restKwargsName.idString();
 
         int slot = currentScope.exists(id);
@@ -1253,7 +1238,7 @@ public class ParserSupport {
     }
 
     public Node new_bv(ByteList identifier) {
-        if (!is_local_id(identifier)) getterIdentifierError(symbolID(identifier));
+        if (!is_local_id(identifier)) getterIdentifierError(symbolID(lexer, identifier));
 
         shadowing_lvar(identifier);
         
@@ -1261,7 +1246,7 @@ public class ParserSupport {
     }
 
     public ArgumentNode arg_var(ByteList id) {
-        RubySymbol name = symbolID(id);
+        RubySymbol name = symbolID(lexer, id);
         return new ArgumentNode(lexer.getLine(), name, getCurrentScope().addVariableThisScope(name.idString()));
     }
 
@@ -1282,7 +1267,7 @@ public class ParserSupport {
     public ByteList shadowing_lvar(ByteList nameBytes) {
         if (nameBytes.realSize() == 1 && nameBytes.charAt(0) == '_') return nameBytes;
 
-        RubySymbol name = symbolID(nameBytes);
+        RubySymbol name = symbolID(lexer, nameBytes);
         String id = name.idString();
 
         StaticScope current = getCurrentScope();
