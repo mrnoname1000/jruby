@@ -273,15 +273,12 @@ public class RubyLexer extends LexingCommon {
 
     public int tokenize_ident(int result) {
         // FIXME: Get token from newtok index to lex_p?
-        ByteList value = createTokenByteList();
-        Ruby runtime = parserSupport.getConfiguration().getRuntime();
-        String id = runtime.newSymbol(value).idString();
-
-        if (isLexState(last_state, EXPR_DOT|EXPR_FNAME) && parserSupport.getCurrentScope().isDefined(id) >= 0) {
+        RubySymbol symbol = getRuntime().newSymbol(createTokenByteList());
+        if (isLexState(last_state, EXPR_DOT|EXPR_FNAME) && parserSupport.getCurrentScope().isDefined(symbol.idString()) >= 0) {
             setState(EXPR_END);
         }
 
-        yaccValue = value;
+        yaccValue = symbol;
         return result;
     }
 

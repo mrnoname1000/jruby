@@ -174,8 +174,7 @@ public class RubyParser {
   modifier_rescue keyword_alias keyword_defined keyword_BEGIN keyword_END
   keyword__LINE__ keyword__FILE__ keyword__ENCODING__ keyword_do_lambda 
 
-%token <ByteList> tIVAR tCVAR 
-%token <RubySymbol> tGVAR tFID tIDENTIFIER tCONSTANT tLABEL
+%token <RubySymbol> tGVAR tFID tIDENTIFIER tCONSTANT tLABEL tIVAR tCVAR 
 %token <StrNode> tCHAR
 %type <ByteList> op 
 %type <RubySymbol> fname sym symbol cname operation operation2 operation3
@@ -686,7 +685,7 @@ mlhs_node       : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = support.assignableLabelOrIdentifier($1, null);
                 }
                 | tIVAR {
-                   $$ = new InstAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
+                   $$ = new InstAsgnNode(lexer.tokline, $1, NilImplicitNode.NIL);
                 }
                 | tGVAR {
                    $$ = new GlobalAsgnNode(lexer.tokline, $1, NilImplicitNode.NIL);
@@ -696,7 +695,7 @@ mlhs_node       : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = new ConstDeclNode(lexer.tokline, $1);
                 }
                 | tCVAR {
-                    $$ = new ClassVarAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
+                    $$ = new ClassVarAsgnNode(lexer.tokline, $1, NilImplicitNode.NIL);
                 } /*mri:user_variable*/
                 | /*mri:keyword_variable*/ keyword_nil {
                     support.compile_error("Can't assign to nil");
@@ -759,7 +758,7 @@ lhs             : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = support.assignableLabelOrIdentifier($1, null);
                 }
                 | tIVAR {
-                    $$ = new InstAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
+                    $$ = new InstAsgnNode(lexer.tokline, $1, NilImplicitNode.NIL);
                 }
                 | tGVAR {
                     $$ = new GlobalAsgnNode(lexer.tokline, $1, NilImplicitNode.NIL);
@@ -770,7 +769,7 @@ lhs             : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = new ConstDeclNode(lexer.tokline, $1);
                 }
                 | tCVAR {
-                    $$ = new ClassVarAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
+                    $$ = new ClassVarAsgnNode(lexer.tokline, $1, NilImplicitNode.NIL);
                 } /*mri:user_variable*/
                 | /*mri:keyword_variable*/ keyword_nil {
                     support.compile_error("Can't assign to nil");
@@ -2197,10 +2196,10 @@ string_dvar     : tGVAR {
                      $$ = new GlobalVarNode(lexer.getLine(), $1);
                 }
                 | tIVAR {
-                     $$ = new InstVarNode(lexer.getLine(), support.symbolID(lexer, $1));
+                     $$ = new InstVarNode(lexer.getLine(), $1);
                 }
                 | tCVAR {
-                     $$ = new ClassVarNode(lexer.getLine(), support.symbolID(lexer, $1));
+                     $$ = new ClassVarNode(lexer.getLine(), $1);
                 }
                 | backref
 
@@ -2213,13 +2212,13 @@ symbol          : tSYMBEG sym {
 // RubySymbol:symbol
 sym             : fname
                 | tIVAR {
-                    $$ = support.symbolID(lexer, $1);
+                    $$ = $1;
                 }
                 | tGVAR {
                     $$ = $1;
                 }
                 | tCVAR {
-                    $$ = support.symbolID(lexer, $1);
+                    $$ = $1;
                 }
 
 dsym            : tSYMBEG xstring_contents tSTRING_END {
@@ -2266,7 +2265,7 @@ var_ref         : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = support.declareIdentifier($1);
                 }
                 | tIVAR {
-                    $$ = new InstVarNode(lexer.tokline, support.symbolID(lexer, $1));
+                    $$ = new InstVarNode(lexer.tokline, $1);
                 }
                 | tGVAR {
                     $$ = new GlobalVarNode(lexer.tokline, $1);
@@ -2275,7 +2274,7 @@ var_ref         : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = new ConstNode(lexer.tokline, $1);
                 }
                 | tCVAR {
-                    $$ = new ClassVarNode(lexer.tokline, support.symbolID(lexer, $1));
+                    $$ = new ClassVarNode(lexer.tokline, $1);
                 } /*mri:user_variable*/
                 | /*mri:keyword_variable*/ keyword_nil { 
                     $$ = new NilNode(lexer.tokline);
@@ -2305,7 +2304,7 @@ var_lhs         : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = support.assignableLabelOrIdentifier($1, null);
                 }
                 | tIVAR {
-                    $$ = new InstAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
+                    $$ = new InstAsgnNode(lexer.tokline, $1, NilImplicitNode.NIL);
                 }
                 | tGVAR {
                     $$ = new GlobalAsgnNode(lexer.tokline, $1, NilImplicitNode.NIL);
@@ -2316,7 +2315,7 @@ var_lhs         : /*mri:user_variable*/ tIDENTIFIER {
                     $$ = new ConstDeclNode(lexer.tokline, $1);
                 }
                 | tCVAR {
-                    $$ = new ClassVarAsgnNode(lexer.tokline, support.symbolID(lexer, $1), NilImplicitNode.NIL);
+                    $$ = new ClassVarAsgnNode(lexer.tokline, $1, NilImplicitNode.NIL);
                 } /*mri:user_variable*/
                 | /*mri:keyword_variable*/ keyword_nil {
                     support.compile_error("Can't assign to nil");
