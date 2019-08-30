@@ -862,10 +862,6 @@ public class ParserSupport {
         return new Colon2ConstNode(line, leftNode, name);
     }
 
-    public Colon3Node new_colon3(RubySymbol name) {
-        return new Colon3Node(lexer.tokline, name);
-    }
-
     public void frobnicate_fcall_args(FCallNode fcall, Node args, Node iter) {
         if (args instanceof BlockPassNode) {
             if (iter != null) lexer.compile_error(PID.BLOCK_ARG_AND_BLOCK_GIVEN, "Both block arg and actual block given.");
@@ -976,11 +972,6 @@ public class ParserSupport {
         return new KeyValuePair<>(key, value);
     }
 
-    public Node asSymbol(int line, ByteList value) {
-        return new SymbolNode(line, symbolID(lexer, value));
-    }
-
-        
     public Node asSymbol(int line, Node value) {
         return value instanceof StrNode ? new SymbolNode(line, symbolID(lexer, ((StrNode) value).getValue())) :
                 new DSymbolNode(line, (DStrNode) value);

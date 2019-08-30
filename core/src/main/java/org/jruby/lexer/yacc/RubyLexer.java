@@ -1513,7 +1513,7 @@ public class RubyLexer extends LexingCommon {
             if (isLabelSuffix()) {
                 setState(EXPR_ARG|EXPR_LABELED);
                 nextc();
-                yaccValue = tempVal;
+                yaccValue = getRuntime().newSymbol(tempVal);
                 return RubyParser.tLABEL;
             }
         }

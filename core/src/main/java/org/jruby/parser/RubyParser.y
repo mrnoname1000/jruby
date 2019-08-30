@@ -174,8 +174,8 @@ public class RubyParser {
   modifier_rescue keyword_alias keyword_defined keyword_BEGIN keyword_END
   keyword__LINE__ keyword__FILE__ keyword__ENCODING__ keyword_do_lambda 
 
-%token <ByteList> tIVAR tCVAR tLABEL
-%token <RubySymbol> tGVAR tFID tIDENTIFIER tCONSTANT
+%token <ByteList> tIVAR tCVAR 
+%token <RubySymbol> tGVAR tFID tIDENTIFIER tCONSTANT tLABEL
 %token <StrNode> tCHAR
 %type <ByteList> op 
 %type <RubySymbol> fname sym symbol cname operation operation2 operation3
@@ -748,7 +748,7 @@ mlhs_node       : /*mri:user_variable*/ tIDENTIFIER {
                         support.yyerror("dynamic constant assignment");
                     }
 
-                    $$ = new ConstDeclNode(support.new_colon3($2));
+                    $$ = new ConstDeclNode(new Colon3Node(lexer.tokline, $2));
                 }
                 | backref {
                     support.backrefAssignError($1);
@@ -824,7 +824,7 @@ lhs             : /*mri:user_variable*/ tIDENTIFIER {
                         support.yyerror("dynamic constant assignment");
                     }
 
-                    $$ = new ConstDeclNode(support.new_colon3($2));
+                    $$ = new ConstDeclNode(new Colon3Node(lexer.tokline, $2));
                 }
                 | backref {
                     support.backrefAssignError($1);
@@ -840,7 +840,7 @@ cname           : tIDENTIFIER {
 
 // Node:cpath - [!null]
 cpath           : tCOLON3 cname {
-                    $$ = support.new_colon3($2);
+                    $$ = new Colon3Node(lexer.tokline, $2);
                 }
                 | cname {
                     $$ = support.new_colon2(null, $1);
@@ -1475,7 +1475,7 @@ primary         : literal
                     $$ = support.new_colon2($1, $3);
                 }
                 | tCOLON3 tCONSTANT {
-                    $$ = support.new_colon3($2);
+                    $$ = new Colon3Node(lexer.tokline, $2);
                 }
                 | tLBRACK aref_args tRBRACK {
                     if ($2 == null) {
@@ -2230,7 +2230,7 @@ dsym            : tSYMBEG xstring_contents tSTRING_END {
                      // EvStrNode :"#{some expression}"
                      // Ruby 1.9 allows empty strings as symbols
                      if ($2 == null) {
-                         $$ = support.asSymbol(lexer.getLine(), new ByteList(new byte[] {}));
+                         $$ = new SymbolNode(lexer.tokline, support.symbolID(lexer, ParserSupport.INTERNAL_ID));
                      } else if ($2 instanceof DStrNode) {
                          $$ = new DSymbolNode($2.getLine(), $<DStrNode>2);
                      } else if ($2 instanceof StrNode) {
@@ -2508,10 +2508,9 @@ f_arg           : f_arg_item {
 
 // RubySymbol:f_label - [!null]
 f_label 	: tLABEL {
-                    RubySymbol symbol = support.symbolID(lexer, $1);
-                    support.arg_var(support.formal_argument(symbol));
-                    lexer.setCurrentArg(symbol);
-                    $$ = symbol;
+                    support.arg_var(support.formal_argument($1));
+                    lexer.setCurrentArg($1);
+                    $$ = $1;
                 }
 
 // [!null]
@@ -2670,7 +2669,7 @@ assoc           : arg_value tASSOC arg_value {
                     $$ = support.createKeyValue($1, $3);
                 }
                 | tLABEL arg_value {
-                    Node label = support.asSymbol(support.getLine($2), $1);
+                    Node label = new SymbolNode(support.getLine($2), $1);
                     $$ = support.createKeyValue(label, $2);
                 }
                 | tSTRING_BEG string_contents tLABEL_END arg_value {
