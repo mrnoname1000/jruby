@@ -32,6 +32,7 @@ package org.jruby.parser;
 import java.io.IOException;
 
 import org.jruby.RubySymbol;
+import org.jruby.ast.AliasNode;
 import org.jruby.ast.ArgsNode;
 import org.jruby.ast.ArgumentNode;
 import org.jruby.ast.ArrayNode;
@@ -104,6 +105,7 @@ import org.jruby.ast.StarNode;
 import org.jruby.ast.StrNode;
 import org.jruby.ast.SymbolNode;
 import org.jruby.ast.TrueNode;
+import org.jruby.ast.UndefNode;
 import org.jruby.ast.UnnamedRestArgNode;
 import org.jruby.ast.UntilNode;
 import org.jruby.ast.VAliasNode;
@@ -230,7 +232,8 @@ public class RubyParser {
 %token <ByteList> tSYMBEG tSTRING_BEG tXSTRING_BEG tREGEXP_BEG tWORDS_BEG tQWORDS_BEG
 %token <ByteList> tSTRING_DBEG tSTRING_DVAR tSTRING_END
 %token <ByteList> tLAMBDA tLAMBEG
-%token <Node> tNTH_REF tBACK_REF tSTRING_CONTENT tINTEGER tIMAGINARY
+%token <Node> tNTH_REF tBACK_REF tINTEGER tIMAGINARY
+%token <StrNode> tSTRING_CONTENT 
 %token <FloatNode> tFLOAT  
 %token <RationalNode> tRATIONAL
 %token <RegexpNode>  tREGEXP_END
@@ -421,7 +424,7 @@ stmt_or_begin   : stmt {
 stmt            : keyword_alias fitem {
                     lexer.setState(EXPR_FNAME|EXPR_FITEM);
                 } fitem {
-                    $$ = support.newAlias($1.intValue(), $2, $4);
+                    $$ = new AliasNode($1.intValue(), $2, $4);
                 }
                 | keyword_alias tGVAR tGVAR {
                     $$ = new VAliasNode($1.intValue(), $2, $3);
@@ -884,12 +887,12 @@ fitem           : fsym {  // LiteralNode
                 }
 
 undef_list      : fitem {
-                    $$ = support.newUndef($1.getLine(), $1);
+                    $$ = new UndefNode($1.getLine(), $1);
                 }
                 | undef_list ',' {
                     lexer.setState(EXPR_FNAME|EXPR_FITEM);
                 } fitem {
-                    $$ = support.appendToBlock(lexer, $1, support.newUndef($1.getLine(), $4));
+                    $$ = support.appendToBlock(lexer, $1, new UndefNode($1.getLine(), $4));
                 }
 
 // ByteList:op
@@ -2074,7 +2077,7 @@ xstring         : tXSTRING_BEG xstring_contents tSTRING_END {
                 }
 
 regexp          : tREGEXP_BEG regexp_contents tREGEXP_END {
-                    $$ = support.newRegexpNode($2, (RegexpNode) $3);
+                    $$ = support.newRegexpNode(lexer, $2, (RegexpNode) $3);
                 }
 
 words           : tWORDS_BEG ' ' word_list tSTRING_END {
@@ -2126,7 +2129,7 @@ qsym_list      : /* none */ {
                     $$ = new ArrayNode(lexer.getLine());
                 }
                 | qsym_list tSTRING_CONTENT ' ' {
-                    $$ = $1.add(support.asSymbol($1.getLine(), $2));
+                    $$ = $1.add(new SymbolNode($1.getLine(), support.symbolID(lexer, ((StrNode) $2).getValue())));
                 }
 
 string_contents : /* none */ {
@@ -2233,7 +2236,7 @@ dsym            : tSYMBEG xstring_contents tSTRING_END {
                      } else if ($2 instanceof DStrNode) {
                          $$ = new DSymbolNode($2.getLine(), $<DStrNode>2);
                      } else if ($2 instanceof StrNode) {
-                         $$ = support.asSymbol($2.getLine(), $2);
+                         $$ = new SymbolNode($2.getLine(), support.symbolID(lexer, ((StrNode) $2).getValue()));
                      } else {
                          $$ = new DSymbolNode($2.getLine());
                          $<DSymbolNode>$.add($2);

@@ -881,11 +881,7 @@ public class ParserSupport {
         node.setPosition(orig.getPosition());
     }
 
-    public Node new_fcall(RubySymbol operation) {
-        return new FCallNode(lexer.tokline, operation);
-    }
-
-    public Node new_super(int line, Node args) {
+    public static Node new_super(int line, Node args) {
         if (args != null && args instanceof BlockPassNode) {
             return new SuperNode(line, ((BlockPassNode) args).getArgsNode(), args);
         }
@@ -916,16 +912,6 @@ public class ParserSupport {
 
     public void setIsInClass(boolean inClass) {
         this.inClass = inClass;
-    }
-
-    /**
-     * Is the top of this scope a block scope (which happens in evals).
-     * This is supposed to serve same purpose as MRIs: dyna_in_block but
-     * I don't quite get why it is so complicated.  All non-eval parsers
-     * have local scopes except eval but they combine in_main || compile_for_eval?
-     */
-    public boolean isBlockTopLevel() {
-        return getConfiguration().isEvalParse();
     }
 
     /**
@@ -966,7 +952,7 @@ public class ParserSupport {
         return dstr;
     }
 
-    public KeyValuePair<Node, Node> createKeyValue(Node key, Node value) {
+    public static KeyValuePair<Node, Node> createKeyValue(Node key, Node value) {
         if (key != null && key instanceof StrNode) ((StrNode) key).setFrozen(true);
 
         return new KeyValuePair<>(key, value);
@@ -1143,14 +1129,6 @@ public class ParserSupport {
         return hash;
     }
 
-    public Node newAlias(int line, Node newNode, Node oldNode) {
-        return new AliasNode(line, newNode, oldNode);
-    }
-
-    public Node newUndef(int line, Node nameNode) {
-        return new UndefNode(line, nameNode);
-    }
-
     /**
      * generate parsing error
      */
@@ -1195,7 +1173,7 @@ public class ParserSupport {
     }
 
     // 1.9
-    public ListNode list_append(Node list, Node item) {
+    public static ListNode list_append(Node list, Node item) {
         if (list == null) return new ArrayNode(item);
         if (!(list instanceof ListNode)) return new ArrayNode(list).add(item);
 
@@ -1220,7 +1198,6 @@ public class ParserSupport {
         return shadowing_lvar(identifier);
     }
 
-    // 1.9
     public RubySymbol shadowing_lvar(RubySymbol name) {
         ByteList nameBytes = name.getBytes();
         if (nameBytes.realSize() == 1 && nameBytes.charAt(0) == '_') return name;
@@ -1239,8 +1216,7 @@ public class ParserSupport {
         return name;
     }
 
-    // 1.9
-    public ListNode list_concat(Node first, Node second) {
+    public static ListNode list_concat(Node first, Node second) {
         if (first instanceof ListNode) {
             if (second instanceof ListNode) {
                 return ((ListNode) first).addAll((ListNode) second);
@@ -1252,19 +1228,17 @@ public class ParserSupport {
         return new ArrayNode(first).add(second);
     }
 
-    // 1.9
     /**
      * If node is a splat and it is splatting a literal array then return the literal array.
      * Otherwise return null.  This allows grammar to not splat into a Ruby Array if splatting
      * a literal array.
      */
-    public Node splat_array(Node node) {
+    public static Node splat_array(Node node) {
         if (node instanceof SplatNode) node = ((SplatNode) node).getValue();
         if (node instanceof ArrayNode) return node;
         return null;
     }
 
-    // 1.9
     public static Node arg_append(Node node1, Node node2) {
         if (node1 == null) return new ArrayNode(node2);
         if (node1 instanceof ListNode) return ((ListNode) node1).add(node2);
@@ -1281,7 +1255,7 @@ public class ParserSupport {
     }
 
     private List<Integer> allocateNamedLocals(RegexpNode regexpNode) {
-        RubyRegexp pattern = RubyRegexp.newRegexp(configuration.getRuntime(), regexpNode.getValue(), regexpNode.getOptions());
+        RubyRegexp pattern = RubyRegexp.newRegexp(lexer.getRuntime(), regexpNode.getValue(), regexpNode.getOptions());
         pattern.setLiteral();
         String[] names = pattern.getNames();
         int length = names.length;
@@ -1318,11 +1292,11 @@ public class ParserSupport {
             message += (addNewline ? "\n" : "") + line;
         }
 
-        throw getConfiguration().getRuntime().newSyntaxError(errorMessage + message);
+        throw lexer.getRuntime().newSyntaxError(errorMessage + message);
     }
 
-    public Node newRegexpNode(Node contents, RegexpNode end) {
-        Ruby runtime = configuration.getRuntime();
+    public static Node newRegexpNode(RubyLexer lexer, Node contents, RegexpNode end) {
+        Ruby runtime = lexer.getRuntime();
         RegexpOptions options = end.getOptions();
         Encoding encoding = lexer.getEncoding();
 
@@ -1353,14 +1327,14 @@ public class ParserSupport {
 
             int line = contents.getLine();
             DRegexpNode dRegexpNode = new DRegexpNode(line, options, encoding);
-            dRegexpNode.add(new StrNode(line, createMaster(options)));
+            dRegexpNode.add(new StrNode(line, createMaster(runtime, options)));
             dRegexpNode.addAll(dStrNode);
             return dRegexpNode;
         }
 
         int line = contents.getLine();
         // EvStrNode: #{val}: no fragment check, but at least set encoding
-        ByteList master = createMaster(options);
+        ByteList master = createMaster(runtime, options);
         lexer.checkRegexpFragment(runtime, master, options);
         encoding = master.getEncoding();
         DRegexpNode node = new DRegexpNode(line, options, encoding);
@@ -1372,10 +1346,8 @@ public class ParserSupport {
     // Create the magical empty 'master' string which will be encoded with
     // regexp options encoding so dregexps can end up starting with the
     // right encoding.
-    private ByteList createMaster(RegexpOptions options) {
-        Encoding encoding = options.setup(configuration.getRuntime());
-
-        return new ByteList(ByteList.NULL_ARRAY, encoding);
+    private static ByteList createMaster(Ruby runtime, RegexpOptions options) {
+        return new ByteList(ByteList.NULL_ARRAY, options.setup(runtime));
     }
     
     // FIXME:  This logic is used by many methods in MRI, but we are only using it in lexer
