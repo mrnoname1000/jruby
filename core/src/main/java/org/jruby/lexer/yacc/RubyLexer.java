@@ -44,6 +44,7 @@ import java.util.Map;
 
 import org.jcodings.Encoding;
 import org.jruby.Ruby;
+import org.jruby.RubySymbol;
 import org.jruby.ast.BackRefNode;
 import org.jruby.ast.BignumNode;
 import org.jruby.ast.ComplexNode;
@@ -1071,15 +1072,14 @@ public class RubyLexer extends LexingCommon {
     }
 
     private int identifierToken(int result, ByteList value) {
-        Ruby runtime = parserSupport.getConfiguration().getRuntime();
-        String id = runtime.newSymbol(value).idString();
+        RubySymbol symbol = getRuntime().newSymbol(value);
 
         if (result == RubyParser.tIDENTIFIER && !isLexState(last_state, EXPR_DOT|EXPR_FNAME) &&
-                parserSupport.getCurrentScope().isDefined(id) >= 0) {
+                parserSupport.getCurrentScope().isDefined(symbol.idString()) >= 0) {
             setState(EXPR_END|EXPR_LABEL);
         }
 
-        yaccValue = value;
+        yaccValue = symbol;
         return result;
     }
     
@@ -1090,7 +1090,7 @@ public class RubyLexer extends LexingCommon {
         case '&':
             setState(EXPR_BEG);
             if ((c = nextc()) == '=') {
-                yaccValue = AMPERSAND_AMPERSAND;
+                yaccValue = getRuntime().newSymbol(AMPERSAND_AMPERSAND);
                 setState(EXPR_BEG);
                 return RubyParser.tOP_ASGN;
             }
@@ -1098,7 +1098,7 @@ public class RubyLexer extends LexingCommon {
             yaccValue = AMPERSAND_AMPERSAND;
             return RubyParser.tANDOP;
         case '=':
-            yaccValue = AMPERSAND;
+            yaccValue = getRuntime().newSymbol(AMPERSAND);
             setState(EXPR_BEG);
             return RubyParser.tOP_ASGN;
         case '.':
@@ -1209,7 +1209,7 @@ public class RubyLexer extends LexingCommon {
         int c = nextc();
         if (c == '=') {
             setState(EXPR_BEG);
-            yaccValue = CARET;
+            yaccValue = getRuntime().newSymbol(CARET);
             return RubyParser.tOP_ASGN;
         }
 
@@ -1297,7 +1297,7 @@ public class RubyLexer extends LexingCommon {
                 if (!tokadd_ident(c)) return EOF;
 
                 last_state = lex_state;
-                yaccValue = createTokenByteList();
+                yaccValue = getRuntime().newSymbol(createTokenByteList());
                 return RubyParser.tGVAR;
 
             }
@@ -1320,7 +1320,7 @@ public class RubyLexer extends LexingCommon {
         case '<':       /* $<: reading filename */
         case '>':       /* $>: default output handle */
         case '\"':      /* $": already loaded files */
-            yaccValue = new ByteList(new byte[] {'$', (byte) c}, USASCII_ENCODING);
+            yaccValue = getRuntime().newSymbol(new ByteList(new byte[] {'$', (byte) c}, USASCII_ENCODING));
             return RubyParser.tGVAR;
 
 
@@ -1333,7 +1333,7 @@ public class RubyLexer extends LexingCommon {
                 pushback('-');
                 return '$';
             }
-            yaccValue = createTokenByteList();
+            yaccValue = getRuntime().newSymbol(createTokenByteList());
             /* xxx shouldn't check if valid option variable */
             return RubyParser.tGVAR;
 
@@ -1343,7 +1343,7 @@ public class RubyLexer extends LexingCommon {
         case '+':       /* $+: string matches last paren. */
             // Explicit reference to these vars as symbols...
             if (isLexState(last_state, EXPR_FNAME)) {
-                yaccValue = new ByteList(new byte[] {'$', (byte) c}, USASCII_ENCODING);
+                yaccValue = getRuntime().newSymbol(new ByteList(new byte[] {'$', (byte) c}, USASCII_ENCODING));
                 return RubyParser.tGVAR;
             }
             
@@ -1357,7 +1357,7 @@ public class RubyLexer extends LexingCommon {
             } while (Character.isDigit(c));
             pushback(c);
             if (isLexState(last_state, EXPR_FNAME)) {
-                yaccValue = createTokenByteList();
+                yaccValue = getRuntime().newSymbol(createTokenByteList());
                 return RubyParser.tGVAR;
             }
 
@@ -1437,7 +1437,7 @@ public class RubyLexer extends LexingCommon {
         case '>':
             if ((c = nextc()) == '=') {
                 setState(EXPR_BEG);
-                yaccValue = GT_GT;
+                yaccValue = getRuntime().newSymbol(GT_GT);
                 return RubyParser.tOP_ASGN;
             }
             pushback(c);
@@ -1667,7 +1667,7 @@ public class RubyLexer extends LexingCommon {
         case '<':
             if ((c = nextc()) == '=') {
                 setState(EXPR_BEG);
-                yaccValue = LT_LT;
+                yaccValue = getRuntime().newSymbol(LT_LT);
                 return RubyParser.tOP_ASGN;
             }
             pushback(c);
@@ -1696,7 +1696,7 @@ public class RubyLexer extends LexingCommon {
         }
         if (c == '=') {
             setState(EXPR_BEG);
-            yaccValue = MINUS;
+            yaccValue = getRuntime().newSymbol(MINUS);
             return RubyParser.tOP_ASGN;
         }
         if (c == '>') {
@@ -1727,7 +1727,7 @@ public class RubyLexer extends LexingCommon {
 
         if (c == '=') {
             setState(EXPR_BEG);
-            yaccValue = PERCENT;
+            yaccValue = getRuntime().newSymbol(PERCENT);
             return RubyParser.tOP_ASGN;
         }
 
@@ -1749,7 +1749,7 @@ public class RubyLexer extends LexingCommon {
             setState(EXPR_BEG);
             if ((c = nextc()) == '=') {
                 setState(EXPR_BEG);
-                yaccValue = OR_OR;
+                yaccValue = getRuntime().newSymbol(OR_OR);
                 return RubyParser.tOP_ASGN;
             }
             pushback(c);
@@ -1757,7 +1757,7 @@ public class RubyLexer extends LexingCommon {
             return RubyParser.tOROP;
         case '=':
             setState(EXPR_BEG);
-            yaccValue = OR;
+            yaccValue = getRuntime().newSymbol(OR);
             return RubyParser.tOP_ASGN;
         default:
             setState(isAfterOperator() ? EXPR_ARG : EXPR_BEG|EXPR_LABEL);
@@ -1783,7 +1783,7 @@ public class RubyLexer extends LexingCommon {
         
         if (c == '=') {
             setState(EXPR_BEG);
-            yaccValue = PLUS;
+            yaccValue = getRuntime().newSymbol(PLUS);
             return RubyParser.tOP_ASGN;
         }
         
@@ -1940,7 +1940,7 @@ public class RubyLexer extends LexingCommon {
         
         if (c == '=') {
             setState(EXPR_BEG);
-            yaccValue = SLASH;
+            yaccValue = getRuntime().newSymbol(SLASH);
             return RubyParser.tOP_ASGN;
         }
         pushback(c);
@@ -1965,7 +1965,7 @@ public class RubyLexer extends LexingCommon {
         case '*':
             if ((c = nextc()) == '=') {
                 setState(EXPR_BEG);
-                yaccValue = STAR_STAR;
+                yaccValue = getRuntime().newSymbol(STAR_STAR);
                 return RubyParser.tOP_ASGN;
             }
 
@@ -1985,7 +1985,7 @@ public class RubyLexer extends LexingCommon {
             break;
         case '=':
             setState(EXPR_BEG);
-            yaccValue = STAR;
+            yaccValue = getRuntime().newSymbol(STAR);
             return RubyParser.tOP_ASGN;
         default:
             pushback(c);

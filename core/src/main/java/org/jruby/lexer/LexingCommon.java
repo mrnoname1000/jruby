@@ -10,6 +10,7 @@ import org.jcodings.specific.UTF8Encoding;
 import org.jruby.Ruby;
 import org.jruby.RubyEncoding;
 import org.jruby.RubyRegexp;
+import org.jruby.RubySymbol;
 import org.jruby.exceptions.RaiseException;
 import org.jruby.lexer.yacc.StackState;
 import org.jruby.runtime.ThreadContext;
@@ -51,7 +52,8 @@ public abstract class LexingCommon {
     public boolean commandStart;
     protected StackState conditionState = new StackState();
     protected StackState cmdArgumentState = new StackState();
-    private ByteList current_arg;
+    // FIXME: move into parser
+    private RubySymbol current_arg;
     private Encoding current_enc;
     protected boolean __end__seen = false;
     public boolean eofp = false;
@@ -231,7 +233,7 @@ public abstract class LexingCommon {
         return conditionState;
     }
 
-    public ByteList getCurrentArg() {
+    public RubySymbol getCurrentArg() {
         return current_arg;
     }
 
@@ -547,7 +549,7 @@ public abstract class LexingCommon {
         return value;
     }
 
-    public void setCurrentArg(ByteList current_arg) {
+    public void setCurrentArg(RubySymbol current_arg) {
         this.current_arg = current_arg;
     }
 
@@ -744,7 +746,8 @@ public abstract class LexingCommon {
         return false;
     }
 
-    public void validateFormalIdentifier(ByteList identifier) {
+    public void validateFormalIdentifier(RubySymbol symbol) {
+        ByteList identifier = symbol.getBytes();
         char first = identifier.charAt(0);
 
         if (Character.isUpperCase(first)) {
@@ -768,7 +771,8 @@ public abstract class LexingCommon {
                 char last = identifier.charAt(identifier.length() - 1);
 
                 if (last == '=' || last == '?' || last == '!') {
-                    compile_error("formal argument must be local variable");
+                    new Exception().printStackTrace();
+                    compile_error("formal argument must be local variable " + symbol);
                 }
         }
     }
