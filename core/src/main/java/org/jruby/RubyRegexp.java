@@ -1481,15 +1481,15 @@ public class RubyRegexp extends RubyObject implements ReOptions, EncodingCapable
      * returns all names in a regexp pattern as id (8859_1) strings
      * @return array of id strings.
      */
-    public String[] getNames() {
+    public ByteList[] getNames() {
         int nameLength = pattern.numberOfNames();
-        if (nameLength == 0) return EMPTY_STRING_ARRAY;
+        if (nameLength == 0) return EMPTY_BYTELIST_ARRAY;
 
-        String[] names = new String[nameLength];
+        ByteList[] names = new ByteList[nameLength];
         int j = 0;
         for (Iterator<NameEntry> i = pattern.namedBackrefIterator(); i.hasNext();) {
             NameEntry e = i.next();
-            names[j++] = new String(e.name, e.nameP, e.nameEnd - e.nameP).intern();
+            names[j++] = new ByteList(e.name, e.nameP, e.nameEnd - e.nameP);
         }
 
         return names;
