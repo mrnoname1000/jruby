@@ -1007,6 +1007,22 @@ public class RubySymbol extends RubyObject implements MarshalEncoding, EncodingC
             return symbol;
         }
 
+        public RubySymbol getSymbol(byte[] bytes, int begin, int length, Encoding encoding) {
+            int hash = javaStringHashCode(bytes, begin, begin + length);
+
+            RubySymbol symbol = findSymbol(bytes, begin, begin + length, hash);
+
+            if (symbol == null) {
+                symbol = createSymbol(
+                        RubyEncoding.decodeISO(bytes, begin, length),
+                        new ByteList(bytes, begin, length, encoding, true),
+                        hash,
+                        false);
+            }
+
+            return symbol;
+        }
+
         public RubySymbol getSymbol(ByteList bytes) {
             return getSymbol(bytes, false);
         }
@@ -1067,6 +1083,14 @@ public class RubySymbol extends RubyObject implements MarshalEncoding, EncodingC
             return symbol;
         }
 
+        private RubySymbol findSymbol(byte[] bytes, int begin, int end, int hash) {
+            for (SymbolEntry e = getEntryFromTable(symbolTable, hash); e != null; e = e.next) {
+                if (isSymbolMatch(bytes, begin, end, hash, e)) return e.symbol.get();
+            }
+
+            return null;
+        }
+
         public RubySymbol fastGetSymbol(String internedName) {
             return fastGetSymbol(internedName, false);
         }
@@ -1100,6 +1124,19 @@ public class RubySymbol extends RubyObject implements MarshalEncoding, EncodingC
 
         private static boolean isSymbolMatch(ByteList bytes, int hash, SymbolEntry entry) {
             return hash == entry.hash && bytes.equals(entry.bytes);
+        }
+
+        private static boolean isSymbolMatch(byte[] bytes, int begin, int last, int hash, SymbolEntry entry) {
+            if (hash != entry.hash || last != entry.bytes.realSize()) return false;
+
+            byte otherBuf[] = entry.bytes.unsafeBytes();
+            int other_begin = entry.bytes.begin();
+            int first;
+
+            for (first = -1;
+                 --last > first && bytes[begin + last] == otherBuf[other_begin + last] &&
+                         ++first < last && bytes[begin + first] == otherBuf[other_begin + first] ; ) ;
+            return first >= last;
         }
 
         private RubySymbol createSymbol(final String name, final ByteList value, final int hash, boolean hard) {
@@ -1371,10 +1408,13 @@ public class RubySymbol extends RubyObject implements MarshalEncoding, EncodingC
 
     // This should be identical to iso8859.toString().hashCode().
     public static int javaStringHashCode(ByteList iso8859) {
-        int h = 0;
         int begin = iso8859.begin();
-        int end = begin + iso8859.realSize();
-        byte[] bytes = iso8859.unsafeBytes();
+
+        return javaStringHashCode(iso8859.unsafeBytes(), begin, begin + iso8859.realSize());
+    }
+
+    private static int javaStringHashCode(byte[] bytes, int begin, int end) {
+        int h = 0;
         for (int i = begin; i < end; i++) {
             int v = bytes[i] & 0xFF;
             h = 31 * h + v;

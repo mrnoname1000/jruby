@@ -3636,6 +3636,10 @@ public final class Ruby implements Constantizable {
         return symbolTable.getSymbol(name);
     }
 
+    public RubySymbol newSymbol(byte[] bytes, int beg, int length, Encoding encoding) {
+        return symbolTable.getSymbol(bytes, beg, length, encoding);
+    }
+
     /**
      * Faster than {@link #newSymbol(String)} if you already have an interned
      * name String. Don't intern your string just to call this version - the

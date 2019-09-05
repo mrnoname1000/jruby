@@ -119,7 +119,7 @@ public abstract class LexingCommon {
     public static final ByteList MINUS_GT = new ByteList(new byte[] {'-', '>'}, USASCIIEncoding.INSTANCE);
     public static final ByteList PERCENT = new ByteList(new byte[] {'%'}, USASCIIEncoding.INSTANCE);
     public static final ByteList OR_OR = CommonByteLists.OR_OR;
-    public static final ByteList OR = new ByteList(new byte[] {'|'}, USASCIIEncoding.INSTANCE);
+    public static final ByteList ORB = new ByteList(new byte[] {'|'}, USASCIIEncoding.INSTANCE);
     public static final ByteList PLUS_AT = new ByteList(new byte[] {'+', '@'}, USASCIIEncoding.INSTANCE);
     public static final ByteList PLUS = new ByteList(new byte[] {'+'}, USASCIIEncoding.INSTANCE);
     public static final ByteList QUESTION = new ByteList(new byte[] {'?'}, USASCIIEncoding.INSTANCE);

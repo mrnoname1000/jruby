@@ -40,7 +40,6 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.HashMap;
-import java.util.Map;
 
 import org.jcodings.Encoding;
 import org.jruby.Ruby;
@@ -69,6 +68,8 @@ import org.jruby.util.SafeDoubleParser;
 import org.jruby.util.StringSupport;
 import org.jruby.util.cli.Options;
 
+import static org.jruby.lexer.yacc.RubyLexer.Keyword.*;
+
 /*
  * This is a port of the MRI lexer to Java.
  */
@@ -78,47 +79,47 @@ public class RubyLexer extends LexingCommon {
     static {
         map = new HashMap<>();
 
-        map.put("end", Keyword.END);
-        map.put("else", Keyword.ELSE);
-        map.put("case", Keyword.CASE);
-        map.put("ensure", Keyword.ENSURE);
-        map.put("module", Keyword.MODULE);
-        map.put("elsif", Keyword.ELSIF);
-        map.put("def", Keyword.DEF);
-        map.put("rescue", Keyword.RESCUE);
-        map.put("not", Keyword.NOT);
-        map.put("then", Keyword.THEN);
-        map.put("yield", Keyword.YIELD);
-        map.put("for", Keyword.FOR);
-        map.put("self", Keyword.SELF);
-        map.put("false", Keyword.FALSE);
-        map.put("retry", Keyword.RETRY);
-        map.put("return", Keyword.RETURN);
-        map.put("true", Keyword.TRUE);
-        map.put("if", Keyword.IF);
-        map.put("defined?", Keyword.DEFINED_P);
-        map.put("super", Keyword.SUPER);
-        map.put("undef", Keyword.UNDEF);
-        map.put("break", Keyword.BREAK);
-        map.put("in", Keyword.IN);
-        map.put("do", Keyword.DO);
-        map.put("nil", Keyword.NIL);
-        map.put("until", Keyword.UNTIL);
-        map.put("unless", Keyword.UNLESS);
-        map.put("or", Keyword.OR);
-        map.put("next", Keyword.NEXT);
-        map.put("when", Keyword.WHEN);
-        map.put("redo", Keyword.REDO);
-        map.put("and", Keyword.AND);
-        map.put("begin", Keyword.BEGIN);
-        map.put("__LINE__", Keyword.__LINE__);
-        map.put("class", Keyword.CLASS);
-        map.put("__FILE__", Keyword.__FILE__);
-        map.put("END", Keyword.LEND);
-        map.put("BEGIN", Keyword.LBEGIN);
-        map.put("while", Keyword.WHILE);
-        map.put("alias", Keyword.ALIAS);
-        map.put("__ENCODING__", Keyword.__ENCODING__);
+        map.put("end", END);
+        map.put("else", ELSE);
+        map.put("case", CASE);
+        map.put("ensure", ENSURE);
+        map.put("module", MODULE);
+        map.put("elsif", ELSIF);
+        map.put("def", DEF);
+        map.put("rescue", RESCUE);
+        map.put("not", NOT);
+        map.put("then", THEN);
+        map.put("yield", YIELD);
+        map.put("for", FOR);
+        map.put("self", SELF);
+        map.put("false", FALSE);
+        map.put("retry", RETRY);
+        map.put("return", RETURN);
+        map.put("true", TRUE);
+        map.put("if", IF);
+        map.put("defined?", DEFINED_P);
+        map.put("super", SUPER);
+        map.put("undef", UNDEF);
+        map.put("break", BREAK);
+        map.put("in", IN);
+        map.put("do", DO);
+        map.put("nil", NIL);
+        map.put("until", UNTIL);
+        map.put("unless", UNLESS);
+        map.put("or", OR);
+        map.put("next", NEXT);
+        map.put("when", WHEN);
+        map.put("redo", REDO);
+        map.put("and", AND);
+        map.put("begin", BEGIN);
+        map.put("__LINE__", __LINE__);
+        map.put("class", CLASS);
+        map.put("__FILE__", __FILE__);
+        map.put("END", LEND);
+        map.put("BEGIN", LBEGIN);
+        map.put("while", WHILE);
+        map.put("alias", ALIAS);
+        map.put("__ENCODING__", __ENCODING__);
     }
 
     private BignumNode newBignumNode(String value, int radix) {
@@ -209,57 +210,90 @@ public class RubyLexer extends LexingCommon {
         }
     }
 
-    private static final Map<ByteList, Keyword> byteList2Keyword;
+    // Below: Converted from C using: gperf -C -P -p -j1 -i 1 -g -o -t -N rb_reserved_word -k'1,3,$' defs/keywords
+    public static final int TOTAL_KEYWORDS=41;
+    public static final int MIN_WORD_LENGTH=2;
+    public static final int MAX_WORD_LENGTH=12;
+    public static final int MAX_HASH_VALUE=50;
 
-    static {
-        byteList2Keyword = new HashMap<>();
+    /* maximum key range = 43, duplicates = 0 */
+    public static final int[] asso_values = new int[] {
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 26, 51, 51, 14, 51, 16,  8,
+            11, 13, 51, 51, 51, 51, 10, 51, 13, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 11, 51, 13,  1, 26,
+            4,  1,  8, 28, 51, 23, 51,  1,  1, 27,
+            5, 19, 21, 51,  8,  3,  3, 11, 51, 21,
+            24, 16, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51, 51, 51, 51, 51,
+            51, 51, 51, 51, 51, 51
+    };
 
-        byteList2Keyword.put(Keyword.END.bytes, Keyword.END);
-        byteList2Keyword.put(Keyword.ELSE.bytes, Keyword.ELSE);
-        byteList2Keyword.put(Keyword.CASE.bytes, Keyword.CASE);
-        byteList2Keyword.put(Keyword.ENSURE.bytes, Keyword.ENSURE);
-        byteList2Keyword.put(Keyword.MODULE.bytes, Keyword.MODULE);
-        byteList2Keyword.put(Keyword.ELSIF.bytes, Keyword.ELSIF);
-        byteList2Keyword.put(Keyword.DEF.bytes, Keyword.DEF);
-        byteList2Keyword.put(Keyword.RESCUE.bytes, Keyword.RESCUE);
-        byteList2Keyword.put(Keyword.NOT.bytes, Keyword.NOT);
-        byteList2Keyword.put(Keyword.THEN.bytes, Keyword.THEN);
-        byteList2Keyword.put(Keyword.YIELD.bytes, Keyword.YIELD);
-        byteList2Keyword.put(Keyword.FOR.bytes, Keyword.FOR);
-        byteList2Keyword.put(Keyword.SELF.bytes, Keyword.SELF);
-        byteList2Keyword.put(Keyword.FALSE.bytes, Keyword.FALSE);
-        byteList2Keyword.put(Keyword.RETRY.bytes, Keyword.RETRY);
-        byteList2Keyword.put(Keyword.RETURN.bytes, Keyword.RETURN);
-        byteList2Keyword.put(Keyword.TRUE.bytes, Keyword.TRUE);
-        byteList2Keyword.put(Keyword.IF.bytes, Keyword.IF);
-        byteList2Keyword.put(Keyword.DEFINED_P.bytes, Keyword.DEFINED_P);
-        byteList2Keyword.put(Keyword.SUPER.bytes, Keyword.SUPER);
-        byteList2Keyword.put(Keyword.UNDEF.bytes, Keyword.UNDEF);
-        byteList2Keyword.put(Keyword.BREAK.bytes, Keyword.BREAK);
-        byteList2Keyword.put(Keyword.IN.bytes, Keyword.IN);
-        byteList2Keyword.put(Keyword.DO.bytes, Keyword.DO);
-        byteList2Keyword.put(Keyword.NIL.bytes, Keyword.NIL);
-        byteList2Keyword.put(Keyword.UNTIL.bytes, Keyword.UNTIL);
-        byteList2Keyword.put(Keyword.UNLESS.bytes, Keyword.UNLESS);
-        byteList2Keyword.put(Keyword.OR.bytes, Keyword.OR);
-        byteList2Keyword.put(Keyword.NEXT.bytes, Keyword.NEXT);
-        byteList2Keyword.put(Keyword.WHEN.bytes, Keyword.WHEN);
-        byteList2Keyword.put(Keyword.REDO.bytes, Keyword.REDO);
-        byteList2Keyword.put(Keyword.AND.bytes, Keyword.AND);
-        byteList2Keyword.put(Keyword.BEGIN.bytes, Keyword.BEGIN);
-        byteList2Keyword.put(Keyword.__LINE__.bytes, Keyword.__LINE__);
-        byteList2Keyword.put(Keyword.CLASS.bytes, Keyword.CLASS);
-        byteList2Keyword.put(Keyword.__FILE__.bytes, Keyword.__FILE__);
-        byteList2Keyword.put(Keyword.LEND.bytes, Keyword.LEND);
-        byteList2Keyword.put(Keyword.LBEGIN.bytes, Keyword.LBEGIN);
-        byteList2Keyword.put(Keyword.WHILE.bytes, Keyword.WHILE);
-        byteList2Keyword.put(Keyword.ALIAS.bytes, Keyword.ALIAS);
-        byteList2Keyword.put(Keyword.__ENCODING__.bytes, Keyword.__ENCODING__);
+    private static int hash(byte[] str, int beg, int len) {
+        int hashValue = len;
+
+        switch (hashValue) {
+            default:
+                hashValue += asso_values[str[beg + 2] & 0xff];
+                // fall through
+            case 2:
+            case 1:
+                hashValue += asso_values[str[beg] & 0xff];
+                break;
+        }
+
+        return hashValue + asso_values[str[beg + len - 1] & 0xff];
     }
 
-    public static Keyword getKeyword(ByteList str) {
-        return byteList2Keyword.get(str);
+    private static final Keyword wordlist[] = {
+            null, null, null, null, null, null, null, null,
+            BREAK, ELSE, NIL, ENSURE, END, THEN, NOT, FALSE,
+            SELF, ELSIF, RESCUE, TRUE, UNTIL, UNLESS, RETURN,
+            DEF, AND, DO, YIELD, FOR, UNDEF, OR, IN, WHEN, RETRY,
+            IF, CASE, REDO, NEXT, SUPER, MODULE, BEGIN, __LINE__,
+            __FILE__, __ENCODING__, LEND, ALIAS, LBEGIN, DEFINED_P,
+            CLASS, null, null, WHILE
+    };
+
+    private static Keyword isReservedWord(byte[] str, int beg, int len) {
+        if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH) {
+            int key = hash(str, beg, len);
+
+            if (key <= MAX_HASH_VALUE) {
+                Keyword keyword = wordlist[key];
+
+                if (keyword != null && keyword.bytes.realSize() == len) {
+                    byte[] s = keyword.bytes.getUnsafeBytes(); // Assuming index 0 for byte arrays of keywords.
+
+                    for (int i = 0; i < len; i++) {
+                        if (str[beg + i] != s[i]) return null;
+                    }
+
+                    return keyword;
+                }
+            }
+        }
+
+        return null;
     }
+    // Above: code converted from gperf
 
     public static Keyword getKeyword(String str) {
         return map.get(str);
@@ -448,13 +482,13 @@ public class RubyLexer extends LexingCommon {
                 "' differs from source encoding '" + encoding + "'");
     }
 
-    private final ByteList TRUE = new ByteList(new byte[] {'t', 'r', 'u', 'e'});
-    private final ByteList FALSE = new ByteList(new byte[] {'f', 'a', 'l', 's', 'e'});
+    private final ByteList TRUEB = new ByteList(new byte[] {'t', 'r', 'u', 'e'});
+    private final ByteList FALSEB = new ByteList(new byte[] {'f', 'a', 'l', 's', 'e'});
     protected int asTruth(String name, ByteList value) {
-        int result = value.caseInsensitiveCmp(TRUE);
+        int result = value.caseInsensitiveCmp(TRUEB);
         if (result == 0) return 1;
 
-        result = value.caseInsensitiveCmp(FALSE);
+        result = value.caseInsensitiveCmp(FALSEB);
         if (result == 0) return 0;
 
         warnings.warn(ID.ACCESSOR_MODULE_FUNCTION, "invalid value for " + name + ": " + value);
@@ -1068,8 +1102,8 @@ public class RubyLexer extends LexingCommon {
         }
     }
 
-    private int identifierToken(int result, ByteList value) {
-        RubySymbol symbol = getRuntime().newSymbol(value);
+    private int identifierToken(int result, byte[] bytes, int begin, int length) {
+        RubySymbol symbol = getRuntime().newSymbol(bytes, begin, length, getEncoding());
 
         if (result == RubyParser.tIDENTIFIER && !isLexState(last_state, EXPR_DOT|EXPR_FNAME) &&
                 parserSupport.getCurrentScope().isDefined(symbol.idString()) >= 0) {
@@ -1371,7 +1405,7 @@ public class RubyLexer extends LexingCommon {
             yaccValue = new NthRefNode(ruby_sourceline, ref);
             return RubyParser.tNTH_REF;
         case '0':
-            return identifierToken(RubyParser.tGVAR, new ByteList(new byte[] {'$', (byte) c}));
+            return identifierToken(RubyParser.tGVAR, new byte[] {'$', (byte) c}, 0, 2);
         default:
             if (!isIdentifierChar(c)) {
                 if (c == EOF || isSpace(c)) {
@@ -1387,7 +1421,7 @@ public class RubyLexer extends LexingCommon {
 
             tokadd_ident(c);
 
-            return identifierToken(RubyParser.tGVAR, createTokenByteList());  // $blah
+            return identifierToken(RubyParser.tGVAR, lexb.unsafeBytes(), lexb.begin() + tokp, lex_p - tokp);  // $blah
         }
     }
 
@@ -1447,12 +1481,13 @@ public class RubyLexer extends LexingCommon {
             return RubyParser.tGT;
         }
     }
+
+    private void badCharacterError(int c) {
+        compile_error(PID.CHARACTER_BAD, "Invalid char `\\" + Integer.toOctalString(c & 0xff) + "' ('" + (char) c + "') in expression");
+    }
     
     private int identifier(int c, boolean commandState) throws IOException {
-        if (!isIdentifierChar(c)) {
-            String badChar = "\\" + Integer.toOctalString(c & 0xff);
-            compile_error(PID.CHARACTER_BAD, "Invalid char `" + badChar + "' ('" + (char) c + "') in expression");
-        }
+        if (!isIdentifierChar(c)) badCharacterError(c);
 
         newtok(true);
         do {
@@ -1476,10 +1511,14 @@ public class RubyLexer extends LexingCommon {
         int result = 0;
 
         last_state = lex_state;
-        ByteList tempVal;
+        byte[] bytes;
+        int begin;
+        int length;
         if (lastBangOrPredicate) {
             result = RubyParser.tFID;
-            tempVal = createTokenByteList();
+            bytes = lexb.unsafeBytes();
+            begin = lexb.begin() + tokp;
+            length = lex_p - tokp;
         } else {
             if (isLexState(lex_state, EXPR_FNAME)) {
                 if ((c = nextc()) == '=') { 
@@ -1497,9 +1536,10 @@ public class RubyLexer extends LexingCommon {
                     pushback(c);
                 }
             }
-            tempVal = createTokenByteList();
-
-            if (result == 0 && Character.isUpperCase(StringSupport.preciseCodePoint(getEncoding(), tempVal.unsafeBytes(), tempVal.begin(), tempVal.begin() + 1))) {
+            bytes = lexb.unsafeBytes();
+            begin = lexb.begin() + tokp;
+            length = lex_p - tokp;
+            if (result == 0 && Character.isUpperCase(StringSupport.preciseCodePoint(getEncoding(), bytes, begin, begin + 1))) {
                 result = RubyParser.tCONSTANT;
             } else {
                 result = RubyParser.tIDENTIFIER;
@@ -1510,13 +1550,13 @@ public class RubyLexer extends LexingCommon {
             if (isLabelSuffix()) {
                 setState(EXPR_ARG|EXPR_LABELED);
                 nextc();
-                yaccValue = getRuntime().newSymbol(tempVal);
+                yaccValue = getRuntime().newSymbol(bytes, begin, length, getEncoding());
                 return RubyParser.tLABEL;
             }
         }
 
         if (lex_state != EXPR_DOT) {
-            Keyword keyword = getKeyword(tempVal); // Is it is a keyword?
+            Keyword keyword = isReservedWord(bytes, begin, length); // Is it is a keyword?
 
             if (keyword != null) {
                 int state = lex_state; // Save state at time keyword is encountered
@@ -1525,9 +1565,9 @@ public class RubyLexer extends LexingCommon {
                 if (isLexState(state, EXPR_FNAME)) {
                     yaccValue = keyword.bytes;
                     return keyword.id0;
-                } else {
-                    yaccValue = ruby_sourceline;
                 }
+
+                yaccValue = ruby_sourceline;
 
                 if (isLexState(lex_state, EXPR_BEG)) commandStart = true;
 
@@ -1550,7 +1590,7 @@ public class RubyLexer extends LexingCommon {
             setState(EXPR_END);
         }
 
-        return identifierToken(result, tempVal);
+        return identifierToken(result, bytes, begin, length);
     }
 
     private int leftBracket(boolean spaceSeen) throws IOException {
@@ -1754,13 +1794,13 @@ public class RubyLexer extends LexingCommon {
             return RubyParser.tOROP;
         case '=':
             setState(EXPR_BEG);
-            yaccValue = getRuntime().newSymbol(OR);
+            yaccValue = getRuntime().newSymbol(ORB);
             return RubyParser.tOP_ASGN;
         default:
             setState(isAfterOperator() ? EXPR_ARG : EXPR_BEG|EXPR_LABEL);
             
             pushback(c);
-            yaccValue = OR;
+            yaccValue = ORB;
             return RubyParser.tPIPE;
         }
     }
