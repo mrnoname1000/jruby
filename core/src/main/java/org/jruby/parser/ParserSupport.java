@@ -284,14 +284,10 @@ public class ParserSupport {
         if (firstNode instanceof DRegexpNode) {
             return new Match2Node(firstNode.getLine(), firstNode, secondNode);
         } else if (firstNode instanceof RegexpNode) {
-            List<Integer> locals = allocateNamedLocals((RegexpNode) firstNode);
+            int[] locals = allocateNamedLocals((RegexpNode) firstNode);
 
-            if (locals.size() > 0) {
-                int[] primitiveLocals = new int[locals.size()];
-                for (int i = 0; i < primitiveLocals.length; i++) {
-                    primitiveLocals[i] = locals.get(i);
-                }
-                return new Match2CaptureNode(firstNode.getLine(), firstNode, secondNode, primitiveLocals);
+            if (locals.length > 0) {
+                return new Match2CaptureNode(firstNode.getLine(), firstNode, secondNode, locals);
             } else {
                 return new Match2Node(firstNode.getLine(), firstNode, secondNode);
             }
@@ -1254,13 +1250,14 @@ public class ParserSupport {
         return new ArgsPushNode(line(node1, node2), node1, node2);
     }
 
-    private List<Integer> allocateNamedLocals(RegexpNode regexpNode) {
+    private int[] allocateNamedLocals(RegexpNode regexpNode) {
         RubyRegexp pattern = RubyRegexp.newRegexp(lexer.getRuntime(), regexpNode.getValue(), regexpNode.getOptions());
         pattern.setLiteral();
         String[] names = pattern.getNames();
         int length = names.length;
-        List<Integer> locals = new ArrayList<Integer>();
+        int[] locals = new int[names.length];
         StaticScope scope = getCurrentScope();
+        int actualIndex = 0;
 
         Ruby runtime = getConfiguration().getRuntime();
         for (int i = 0; i < length; i++) {
@@ -1272,11 +1269,18 @@ public class ParserSupport {
                     if (warnings.isVerbose() && !scope.isNamedCapture(slot)) {
                         warnings.warn(ID.AMBIGUOUS_ARGUMENT, lexer.getFile(), getLine(regexpNode), str(runtime, "named capture conflicts a local variable - " , ids(runtime, names[i])));
                     }
-                    locals.add(slot);
+                    locals[actualIndex] = slot;
                 } else {
-                    locals.add(getCurrentScope().addNamedCaptureVariable(id));
+                    locals[actualIndex] = getCurrentScope().addNamedCaptureVariable(id);
                 }
+                actualIndex++;
             }
+        }
+
+        if (names.length != actualIndex) { // Just in case we have some bad named locals (rare).
+            int[] newLocals = new int[actualIndex];
+            System.arraycopy(locals, 0, newLocals, 0, actualIndex);
+            locals = newLocals;
         }
 
         return locals;
