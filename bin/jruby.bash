@@ -105,7 +105,7 @@ add_log "  $BASH_SOURCE"
 add_log "JRuby command line options:"
 add_log "  $*"
 add_log "Current directory:"
-add_log "  $(pwd)"
+add_log "  $PWD"
 
 add_log
 add_log "Environment:"
@@ -371,8 +371,7 @@ if $cygwin; then
   if [ "${1:0:1}" = "/" ] && [ -f "$1" ] || [ -d "$1" ]; then
     win_arg="$(cygpath -w "$1")"
     shift
-    win_args=("$win_arg" "$@")
-    set -- "${win_args[@]}"
+    set -- "$win_arg" "$@"
   fi
 
   # fix JLine to use UnixTerminal
@@ -422,8 +421,8 @@ jvm_command=("$JAVACMD" $JAVA_OPTS "$JFFI_OPTS" "${java_args[@]}")
 if [ "$NO_BOOTCLASSPATH" ] || [ "$VERIFY_JRUBY" ]; then
   jvm_command+=("${classpath_args[@]}")
 else
-  jvm_command+=(-Xbootclasspath/a:"$JRUBY_CP" \
-    -classpath "$CP$CP_DELIMITER$CLASSPATH" "-Djruby.home=$JRUBY_HOME")
+  append_args jvm -Xbootclasspath/a:"$JRUBY_CP" \
+    -classpath "$CP$CP_DELIMITER$CLASSPATH"
 fi
 
 jvm_command+=("-Djruby.home=$JRUBY_HOME" \
