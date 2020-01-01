@@ -48,9 +48,17 @@ append_args() {
       classpath_args+=("$@") ;;
   esac
 }
+append_arrays() {
+  for arg in "$1" "$2" ; do
+    shift
+    get_array_name "$arg"
+    first="$second"
+    second="$array"
+  done
+  eval "$first+=(\"\${${second}[@]}\")"
+}
 print_array() {
   get_array_name "$1"
-  printf "\n%s:" "$1"
   eval "printf ' \"%s\"' \"\${${array}[@]}\""
   echo
 }
@@ -451,10 +459,11 @@ fi
 JAVA_OPTS="$java_opts_from_files $JAVA_OPTS"
 
 # Don't quote JAVA_OPTS; we want it to expand
-append_args jvm "$JAVACMD" $JAVA_OPTS "$JFFI_OPTS" "${java_args[@]}"
+append_args jvm "$JAVACMD" $JAVA_OPTS "$JFFI_OPTS"
+append_arrays jvm java
 
 if [ "$NO_BOOTCLASSPATH" ] || [ "$VERIFY_JRUBY" ]; then
-  append_args jvm "${classpath_args[@]}"
+  append_arrays jvm classpath
 else
   append_args jvm -Xbootclasspath/a:"$JRUBY_CP" \
     -classpath "$CP$CP_DELIMITER$CLASSPATH"
