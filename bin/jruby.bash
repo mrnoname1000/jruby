@@ -48,6 +48,12 @@ append_args() {
       classpath_args+=("$@") ;;
   esac
 }
+print_array() {
+  get_array_name "$1"
+  printf "\n%s:" "$1"
+  eval "printf ' \"%s\"' \"\${${array}[@]}\""
+  echo
+}
 
 JAVA_CLASS_JRUBY_MAIN=org.jruby.Main
 java_class="$JAVA_CLASS_JRUBY_MAIN"
@@ -461,7 +467,7 @@ append_args jvm "-Djruby.home=$JRUBY_HOME" \
 
 add_log
 add_log "Java command line:"
-add_log "  ${jvm_command[*]}"
+add_log "  $(print_array jvm)"
 
 if [ "$print_environment_log" ]; then
   echo "$environment_log"
