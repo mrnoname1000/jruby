@@ -20,6 +20,20 @@ fi
 
 declare -a java_args
 declare -a ruby_args
+get_array_name() {
+  case $1 in
+    java)
+      array=java_args ;;
+    ruby)
+      array=ruby_args ;;
+    jvm)
+      array=jvm_command ;;
+    classpath)
+      array=classpath_args ;;
+    *)
+      unset -v array ;;
+  esac
+}
 append_args() {
   arg="$1"
   shift
