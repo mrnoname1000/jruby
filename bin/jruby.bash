@@ -62,6 +62,15 @@ print_array() {
   eval "printf ' \"%s\"' \"\${${array}[@]}\""
   echo
 }
+run_jvm() {
+  case "$1" in
+    true)
+      exec "${jvm_command[@]}" ;;
+    false)
+      "${jvm_command[@]}" ;;
+  esac
+  return $?
+}
 
 JAVA_CLASS_JRUBY_MAIN=org.jruby.Main
 java_class="$JAVA_CLASS_JRUBY_MAIN"
@@ -482,17 +491,13 @@ fi
 
 # ----- Run JRuby! ------------------------------------------------------------
 
-if $use_exec; then
-  exec "${jvm_command[@]}"
-else
-  "${jvm_command[@]}"
+run_jvm "$use_exec"
 
-  # Record the exit status immediately, or it will be overridden.
-  JRUBY_STATUS=$?
+# Record the exit status immediately, or it will be overridden.
+JRUBY_STATUS=$?
 
-  if $cygwin; then
-    stty icanon echo > /dev/null 2>&1
-  fi
-
-  exit $JRUBY_STATUS
+if $cygwin; then
+stty icanon echo > /dev/null 2>&1
 fi
+
+exit $JRUBY_STATUS
