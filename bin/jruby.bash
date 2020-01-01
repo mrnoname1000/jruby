@@ -20,6 +20,20 @@ fi
 
 declare -a java_args
 declare -a ruby_args
+append_args() {
+  arg="$1"
+  shift
+  case $arg in
+    java)
+      java_args+=("$@") ;;
+    ruby)
+      ruby_args+=("$@") ;;
+    jvm)
+      jvm_command+=("$@") ;;
+    classpath)
+      classpath_args+=("$@") ;;
+  esac
+}
 
 JAVA_CLASS_JRUBY_MAIN=org.jruby.Main
 java_class="$JAVA_CLASS_JRUBY_MAIN"
@@ -276,29 +290,29 @@ do
          shift ;;
      -J-ea*)
          VERIFY_JRUBY="yes"
-         java_args+=("${1#-J}") ;;
+         append_args java "${1#-J}" ;;
      -J-Djava.security.egd=*)
-         JAVA_SECURITY_EGD=${1#-J-Djava.security.egd=} ;;
+         JAVA_SECURITY_EGD="${1#-J-Djava.security.egd=}" ;;
      # This must be the last check for -J
      -J*)
-         java_args+=("${1#-J}") ;;
+         append_args java "${1#-J}" ;;
      # Pass -X... and -X? search options through
      -X*...|-X*\?)
-        ruby_args+=("$1") ;;
+        append_args ruby "$1" ;;
      # Match -Xa.b.c=d to translate to -Da.b.c=d as a java option
      -X*.*)
-        java_args+=("-Djruby.${1#-X}") ;;
+        append_args java "-Djruby.${1#-X}" ;;
      # Match switches that take an argument
      -C|-e|-I|-S)
-        ruby_args+=("$1" "$2")
+        append_args ruby "$1" "$2"
         shift ;;
      # Run with JMX management enabled
      --manage)
-        java_args+=("-Dcom.sun.management.jmxremote")
-        java_args+=("-Djruby.management.enabled=true") ;;
+        append_args java "-Dcom.sun.management.jmxremote" \
+          "-Djruby.management.enabled=true" ;;
      # Don't launch a GUI window, no matter what
      --headless)
-        java_args+=("-Djava.awt.headless=true") ;;
+        append_args java "-Djava.awt.headless=true" ;;
      # Run under JDB
      --jdb)
         if [ -z "$JAVA_HOME" ] ; then
@@ -311,8 +325,8 @@ do
           fi
         fi
         JDB_SOURCEPATH="${JRUBY_HOME}/core/src/main/java:${JRUBY_HOME}/lib/ruby/stdlib:."
-        java_args+=("-sourcepath" "$JDB_SOURCEPATH")
-        JRUBY_OPTS+=("-X+C") ;;
+        append_args java "-sourcepath" "$JDB_SOURCEPATH"
+        append_args jruby -X+C ;;
      --client|--server|--noclient)
         echo "Warning: the $1 flag is deprecated and has no effect most JVMs" ;;
      --dev)
@@ -320,9 +334,9 @@ do
         # For OpenJ9 use environment variable to enable quickstart and shareclasses
         export OPENJ9_JAVA_OPTIONS="-Xquickstart -Xshareclasses" ;;
      --sample)
-        java_args+=("-Xprof") ;;
+        append_args java "-Xprof" ;;
      --record)
-        java_args+=("-XX:+FlightRecorder" "-XX:StartFlightRecording=dumponexit=true") ;;
+        append_args java "-XX:+FlightRecorder" "-XX:StartFlightRecording=dumponexit=true" ;;
      --no-bootclasspath)
         NO_BOOTCLASSPATH=true ;;
      --ng*)
@@ -338,7 +352,7 @@ do
        break ;;
      # Other opts go to ruby
      -*)
-       ruby_args+=("$1") ;;
+       append_args ruby "$1" ;;
      # Abort processing on first non-opt arg
      *)
        break ;;
@@ -348,11 +362,11 @@ done
 
 # Force JDK to use specified java.security.egd rand source
 if [ -n "$JAVA_SECURITY_EGD" ]; then
-  java_args+=("-Djava.security.egd=$JAVA_SECURITY_EGD")
+  append_args java "-Djava.security.egd=$JAVA_SECURITY_EGD"
 fi
 
 # Append the rest of the arguments
-ruby_args+=("$@")
+append_args ruby "$@"
 
 # Put the ruby_args back into the position arguments $1, $2 etc
 set -- "${ruby_args[@]}"
@@ -386,7 +400,7 @@ fi
 
 if [ "$is_java9" ]; then
   # Use module path instead of classpath for the jruby libs
-  classpath_args=(--module-path "$JRUBY_CP" -classpath "$CP$CP_DELIMITER$CLASSPATH")
+  append_args classpath --module-path "$JRUBY_CP" -classpath "$CP$CP_DELIMITER$CLASSPATH"
 
   # Switch to non-boot path since we can't use bootclasspath on 9+
   NO_BOOTCLASSPATH=1
@@ -408,7 +422,7 @@ if [ "$is_java9" ]; then
     JAVA_OPTS="$JAVA_OPTS -XX:+UnlockDiagnosticVMOptions -XX:SharedArchiveFile=$JRUBY_JSA"
   fi
 else
-  classpath_args=(-classpath "$JRUBY_CP$CP_DELIMITER$CP$CP_DELIMITER$CLASSPATH")
+  append_args classpath -classpath "$JRUBY_CP$CP_DELIMITER$CP$CP_DELIMITER$CLASSPATH"
 fi
 
 # ----- Final prepration of the Java command line -----------------------------
@@ -417,19 +431,19 @@ fi
 JAVA_OPTS="$java_opts_from_files $JAVA_OPTS"
 
 # Don't quote JAVA_OPTS; we want it to expand
-jvm_command=("$JAVACMD" $JAVA_OPTS "$JFFI_OPTS" "${java_args[@]}")
+append_args jvm "$JAVACMD" $JAVA_OPTS "$JFFI_OPTS" "${java_args[@]}"
 
 if [ "$NO_BOOTCLASSPATH" ] || [ "$VERIFY_JRUBY" ]; then
-  jvm_command+=("${classpath_args[@]}")
+  append_args jvm "${classpath_args[@]}"
 else
   append_args jvm -Xbootclasspath/a:"$JRUBY_CP" \
     -classpath "$CP$CP_DELIMITER$CLASSPATH"
 fi
 
-jvm_command+=("-Djruby.home=$JRUBY_HOME" \
+append_args jvm "-Djruby.home=$JRUBY_HOME" \
     "-Djruby.lib=$JRUBY_HOME/lib" "-Djruby.script=jruby" \
     "-Djruby.shell=$JRUBY_SHELL" \
-    "$java_class" "$@")
+    "$java_class" "$@"
 
 add_log
 add_log "Java command line:"
