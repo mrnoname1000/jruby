@@ -75,9 +75,11 @@ if [ -r "/dev/urandom" ]; then
 fi
 
 # Gather environment information as we go
-environment_log=$'JRuby Environment\n================='
+cr='
+'
+environment_log="JRuby Environment${cr}================="
 add_log() {
-    environment_log+=$'\n'"$1"
+    environment_log="$environment_log${cr}$1"
 }
 
 # Logic to process "arguments files" on both Java 8 and Java 9+
@@ -85,8 +87,7 @@ unset java_opts_from_files
 process_java_opts() {
   java_opts_file="$1"
   if [ -r "$java_opts_file" ]; then
-    add_log
-    add_log "Adding Java options from: $java_opts_file"
+    add_log "${cr}Adding Java options from: $java_opts_file"
 
     while read -r line; do
       if [ "$line" ]; then
@@ -141,19 +142,18 @@ jruby_jsa_file="$JRUBY_HOME/lib/jruby.jsa"
 
 # ----- Initialize environment log -------------------------
 
-add_log
-add_log "JRuby executable:"
-add_log "  $BASH_SOURCE"
-add_log "JRuby command line options:"
-add_log "  $*"
-add_log "Current directory:"
-add_log "  $PWD"
+add_log "
+JRuby executable:
+  $BASH_SOURCE
+JRuby command line options:
+  $*
+Current directory:
+  $PWD
 
-add_log
-add_log "Environment:"
-add_log "  JRUBY_HOME: $JRUBY_HOME"
-add_log "  JRUBY_OPTS: $JRUBY_OPTS"
-add_log "  JAVA_OPTS: $JAVA_OPTS"
+Environment:
+  JRUBY_HOME: $JRUBY_HOME
+  JRUBY_OPTS: $JRUBY_OPTS
+  JAVA_OPTS: $JAVA_OPTS"
 
 # ----- Discover JVM and prep environment to run it ---------------------------
 
@@ -191,8 +191,7 @@ add_log "  JAVACMD: $JAVACMD"
 add_log "  JAVA_HOME: $JAVA_HOME"
 
 if [ "$is_java9" ]; then
-  add_log
-  add_log "Detected Java modules at $JAVA_HOME/jmods"
+  add_log "${cr}Detected Java modules at $JAVA_HOME/jmods"
 fi
 
 # ----- Process .java_opts files ----------------------------------------------
@@ -443,8 +442,7 @@ if [ "$is_java9" ]; then
 
   # If we have a jruby.jsa file, enable AppCDS
   if [ -f "$JRUBY_JSA" ]; then
-    add_log
-    add_log "Detected Class Data Sharing archive:"
+    add_log "${cr}Detected Class Data Sharing archive:"
     add_log "  $JRUBY_JSA"
 
     JAVA_OPTS="$JAVA_OPTS -XX:+UnlockDiagnosticVMOptions -XX:SharedArchiveFile=$JRUBY_JSA"
@@ -474,8 +472,7 @@ append_args jvm "-Djruby.home=$JRUBY_HOME" \
     "-Djruby.shell=$JRUBY_SHELL" \
     "$java_class" "$@"
 
-add_log
-add_log "Java command line:"
+add_log "${cr}Java command line:"
 add_log "  $(print_array jvm)"
 
 if [ "$print_environment_log" ]; then
