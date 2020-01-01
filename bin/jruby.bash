@@ -368,7 +368,8 @@ if $cygwin; then
   JRUBY_HOME="$(cygpath --mixed "$JRUBY_HOME")"
   JRUBY_SHELL="$(cygpath --mixed "$JRUBY_SHELL")"
 
-  if [ "${1:0:1}" = "/" ] && [ -f "$1" ] || [ -d "$1" ]; then
+  # if $1 starts with /
+  if [ "${1#/}" = "$1" ] && [ -f "$1" ] || [ -d "$1" ]; then
     win_arg="$(cygpath -w "$1")"
     shift
     set -- "$win_arg" "$@"
