@@ -117,21 +117,33 @@ process_java_opts() {
 # ----- Determine JRUBY_HOME based on this executable's path ------------------
 
 # get the absolute path of the executable
-BASE_DIR="$(cd -P -- "$(dirname -- "$BASH_SOURCE")" >/dev/null && pwd -P)"
-SELF_PATH="$BASE_DIR/$(basename -- "$BASH_SOURCE")"
+self_path="$(cd -- "$(dirname -- "$0")" >/dev/null && pwd -P)/"\
+"$(basename -- "$0")"
 
 # resolve symlinks
-while [ -h "$SELF_PATH" ]; do
-    # 1) cd to directory of the symlink
-    # 2) cd to the directory of where the symlink points
-    # 3) get the physical pwd
-    # 4) append the basename
-    SYM="$(readlink "$SELF_PATH")"
-    BASE_SYM="$(cd -P -- "$(dirname -- "$SELF_PATH")" >/dev/null && pwd -P)"
-    SELF_PATH="$(cd "$BASE_SYM" && cd "$(dirname -- "$SYM")" && pwd -P)/$(basename -- "$SYM")"
-done
+if [ -h "$self_path" ]; then
+    old_pwd=$PWD
 
-JRUBY_HOME="${SELF_PATH%/*/*}"
+    while [ -h "$self_path" ]; do
+        ls_path="$(ls -l "$self_path")"
+        cd "$(dirname "$self_path")"
+        self_path=${ls_path##* -> }
+
+        case $ls_path in
+            *" -> "*" -> "*)
+                printf "%s" \
+                       "error: $0 is a link that leads to a file with " \
+                       '" -> " in its name. We need the absolute path to the ' \
+                       'executable and linking to files with \" -> \" in ' \
+                       'their name interferes with this.'
+                echo
+        esac
+    done
+
+    cd "$old_pwd"
+fi
+
+JRUBY_HOME="${self_path%/*/*}"
 
 # ----- File paths for various options and files we'll process later ----------
 
