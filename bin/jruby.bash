@@ -265,16 +265,20 @@ process_java_opts "$home_jruby_java_opts_file"
 process_java_opts "$pwd_jruby_java_opts_file"
 
 # Capture some Java options to be passed separately
-JAVA_OPTS_TEMP=""
-for opt in $JAVA_OPTS; do
-    case $opt in
-        -Xmx*) JAVA_MEM="$opt" ;;
-        -Xss*) JAVA_STACK="$opt" ;;
-        *) JAVA_OPTS_TEMP="$JAVA_OPTS_TEMP $opt" ;;
-    esac
-done
-
-JAVA_OPTS="$JAVA_OPTS_TEMP"
+capture_java_opts() {
+    local opt
+    set -- $JAVA_OPTS
+    for opt; do
+        case $opt in
+            -Xmx*) JAVA_MEM="$opt" ;;
+            -Xss*) JAVA_STACK="$opt" ;;
+            *) continue ;;
+        esac
+        shift
+    done
+    JAVA_OPTS="$*"
+}
+capture_java_opts
 
 # ----- Set up the JRuby class/module path ------------------------------------
 
