@@ -313,26 +313,35 @@ JRUBY_CP=$result
 
 # ----- Add additional jars from lib to classpath -----------------------------
 
-if [ "$JRUBY_PARENT_CLASSPATH" ]; then
-    # Use same classpath propagated from parent jruby
-    CP="$JRUBY_PARENT_CLASSPATH"
-else
-    # add other jars in lib to CP for command-line execution
-    for j in "$JRUBY_HOME"/lib/*.jar; do
-        case "${j#"$JRUBY_HOME/lib/"}" in
-            jruby.jar|jruby-complete.jar) continue
-        esac
-        if [ "$CP" ]; then
-            CP="$CP$CP_DELIMITER$j"
-        else
-            CP="$j"
-        fi
-    done
+get_classpath_with_lib_jars() {
+    local CP
+    if [ "$JRUBY_PARENT_CLASSPATH" ]; then
+        # Use same classpath propagated from parent jruby
+        CP="$JRUBY_PARENT_CLASSPATH"
+    else
+        # add other jars in lib to CP for command-line execution
+        local j
+        for j in "$JRUBY_HOME"/lib/*.jar; do
+            case "${j#"$JRUBY_HOME/lib/"}" in
+                jruby.jar|jruby-complete.jar) continue
+            esac
+            if [ "$CP" ]; then
+                echo "$CP"
+                CP="$CP$CP_DELIMITER$j"
+            else
+                CP="$j"
+            fi
+        done
 
-    if [ "$CP" ] && $cygwin; then
-        CP="$(cygpath -p -w "$CP")"
+        if [ "$CP" ] && $cygwin; then
+            CP="$(cygpath -p -w "$CP")"
+        fi
     fi
-fi
+
+    result="$CP"
+}
+get_classpath_with_lib_jars
+CP="$result"
 
 if $cygwin; then
     # switch delimiter only after building Unix style classpaths
