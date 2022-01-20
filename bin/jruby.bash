@@ -285,25 +285,31 @@ capture_java_opts
 CP_DELIMITER=":"
 
 # add main jruby jar to the classpath
-JRUBY_ALREADY_ADDED=false
-for j in "$JRUBY_HOME"/lib/jruby.jar "$JRUBY_HOME"/lib/jruby-complete.jar; do
-    if [ ! -e "$j" ]; then
-        continue
-    fi
-    if [ "$JRUBY_CP" ]; then
-        JRUBY_CP="$JRUBY_CP$CP_DELIMITER$j"
-    else
-        JRUBY_CP="$j"
-    fi
-    if $JRUBY_ALREADY_ADDED; then
-        echo "WARNING: more than one JRuby JAR found in lib directory" 1>&2
-    fi
-    JRUBY_ALREADY_ADDED=true
-done
+add_jruby_jar_cp() {
+    local j JRUBY_ALREADY_ADDED=false JRUBY_CP="$JRUBY_CP"
+    for j in "$JRUBY_HOME"/lib/jruby.jar "$JRUBY_HOME"/lib/jruby-complete.jar; do
+        if [ ! -e "$j" ]; then
+            continue
+        fi
+        if [ "$JRUBY_CP" ]; then
+            JRUBY_CP="$JRUBY_CP$CP_DELIMITER$j"
+        else
+            JRUBY_CP="$j"
+        fi
+        if $JRUBY_ALREADY_ADDED; then
+            echo "WARNING: more than one JRuby JAR found in lib directory" 1>&2
+        fi
+        JRUBY_ALREADY_ADDED=true
+    done
 
-if $cygwin; then
-    JRUBY_CP="$(cygpath -p -w "$JRUBY_CP")"
-fi
+    if $cygwin; then
+        JRUBY_CP="$(cygpath -p -w "$JRUBY_CP")"
+    fi
+
+    result="$JRUBY_CP"
+}
+add_jruby_jar_cp
+JRUBY_CP=$result
 
 # ----- Add additional jars from lib to classpath -----------------------------
 
