@@ -142,14 +142,19 @@ resolve_symlinks() {
 
 # ----- Determine JRUBY_HOME based on this executable's path ------------------
 
-# get the absolute path of the executable
-dir_name "$BASH_SOURCE"
-BASE_DIR="$(cd -P -- "$result" >/dev/null && pwd -P)"
-base_name "$BASH_SOURCE"
-resolve_symlinks "$BASE_DIR/$result"
-SELF_PATH="$result"
+get_jruby_home() {
+    local BASE_DIR SELF_PATH
+    # get the absolute path of the executable
+    dir_name "$1"
+    BASE_DIR="$(cd -P -- "$result" >/dev/null && pwd -P)"
+    base_name "$1"
+    resolve_symlinks "$BASE_DIR/$result"
+    SELF_PATH="$result"
 
-JRUBY_HOME="${SELF_PATH%/*/*}"
+    result="${SELF_PATH%/*/*}"
+}
+get_jruby_home "$BASH_SOURCE"
+JRUBY_HOME="$result"
 
 # ----- File paths for various options and files we'll process later ----------
 
