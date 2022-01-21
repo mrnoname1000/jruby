@@ -5,8 +5,7 @@
 
 # ----- Set variable defaults -------------------------------------------------
 
-readonly JAVA_CLASS_JRUBY_MAIN=org.jruby.Main
-readonly java_class="$JAVA_CLASS_JRUBY_MAIN"
+readonly java_class=org.jruby.Main
 readonly JRUBY_SHELL=/bin/sh
 
 cygwin=false
@@ -203,12 +202,10 @@ if [ -z "$JAVACMD" ]; then
             dir_name "$result"
             JAVA_HOME="$result"
         fi
+    elif $cygwin; then
+        JAVACMD="$(cygpath -u "$JAVA_HOME")/bin/java"
     else
-        if $cygwin; then
-            JAVACMD="$(cygpath -u "$JAVA_HOME")/bin/java"
-        else
-            JAVACMD="$JAVA_HOME/bin/java"
-        fi
+        JAVACMD="$JAVA_HOME/bin/java"
     fi
 else
     resolve_symlinks "$(command -v "$JAVACMD")"
@@ -257,7 +254,6 @@ process_java_opts "$home_jruby_java_opts_file"
 process_java_opts "$pwd_jruby_java_opts_file"
 
 # Capture some Java options to be passed separately
-unset JAVA_OPTS_TEMP
 JAVA_OPTS_TEMP=""
 for opt in $JAVA_OPTS; do
     case $opt in
@@ -301,12 +297,9 @@ if [ "$JRUBY_PARENT_CLASSPATH" ]; then
 else
     # add other jars in lib to CP for command-line execution
     for j in "$JRUBY_HOME"/lib/*.jar; do
-        if [ "$j" = "$JRUBY_HOME"/lib/jruby.jar ]; then
-            continue
-        fi
-        if [ "$j" = "$JRUBY_HOME"/lib/jruby-complete.jar ]; then
-            continue
-        fi
+        case "${j#"$JRUBY_HOME/lib/"}" in
+            jruby.jar|jruby-complete.jar) continue
+        esac
         if [ "$CP" ]; then
             CP="$CP$CP_DELIMITER$j"
         else
@@ -347,12 +340,7 @@ do
             echo "(Prepend -J in front of these options when using 'jruby' command)" 1>&2
             exit
             ;;
-        -J-classpath)
-            CP="$CP$CP_DELIMITER$2"
-            CLASSPATH=""
-            shift
-            ;;
-        -J-cp)
+        -J-classpath|-J-cp)
             CP="$CP$CP_DELIMITER$2"
             CLASSPATH=""
             shift
@@ -430,11 +418,8 @@ if [ -n "$JAVA_SECURITY_EGD" ]; then
     java_args+=("-Djava.security.egd=$JAVA_SECURITY_EGD")
 fi
 
-# Append the rest of the arguments
+# The rest of the arguments are for ruby
 ruby_args+=("$@")
-
-# Put the ruby_args back into the position arguments $1, $2 etc
-set -- "${ruby_args[@]}"
 
 JAVA_OPTS="$JAVA_OPTS $JAVA_MEM $JAVA_STACK"
 
@@ -450,8 +435,7 @@ if $cygwin; then
     if [ "${1:0:1}" = "/" ] && [ -f "$1" ] || [ -d "$1" ]; then
         win_arg="$(cygpath -w "$1")"
         shift
-        win_args=("$win_arg" "$@")
-        set -- "${win_args[@]}"
+        set -- "$win_arg" "$@"
     fi
 
     # fix JLine to use UnixTerminal
