@@ -43,7 +43,6 @@ if [ -z "$JAVA_STACK" ]; then
     JAVA_STACK=-Xss2048k
 fi
 
-java_args=""
 ruby_args=""
 
 # Force OpenJDK-based JVMs to use /dev/urandom for random number generation
@@ -347,11 +346,10 @@ readonly CP_DELIMITER
 # Split out any -J argument for passing to the JVM.
 # Scanning for args is aborted by '--'.
 set -- $JRUBY_OPTS "$@"
-i=1
+i=1 argc=$#
 # increment pointer, permute arguments
 [ "$BASH" ] && shopt -s expand_aliases
-alias cycle='i=$((i + 1)); set -- "$@" "$1"; shift'
-while [ $i -le $# ]
+while [ $i -le $argc ]
 do
     case $1 in
         # Stuff after '-J' in this argument goes to JVM
@@ -370,31 +368,39 @@ do
         -J-classpath|-J-cp)
             CP="$CP$CP_DELIMITER$2"
             CLASSPATH=""
-            cycle
+            shift
+            i=$((i + 1))
             ;;
         -J-ea*)
             VERIFY_JRUBY=true
-            java_args="$java_args \${$i#-J}"
+            set -- "$@" "${1#-J}"
             ;;
         -J-Djava.security.egd=*) JAVA_SECURITY_EGD=${1#-J-Djava.security.egd=} ;;
         # This must be the last check for -J
-        -J*) java_args="$java_args \${$i#-J}" ;;
+        -J*) set -- "$@" "${1#-J}" ;;
         # Pass -X... and -X? search options through
-        -X*...|-X*\?) ruby_args="$ruby_args \$$i" ;;
+        # RUBY ARG
+        -X*...|-X*\?)
+            set -- "$@" "$1"
+            ruby_arg_indices="$ruby_arg_indices $i"
+            ;;
         # Match -Xa.b.c=d to translate to -Da.b.c=d as a java option
-        -X*.*) java_args="$java_args -Djruby.\${$i#-X}" ;;
+        -X*.*) set -- "$@" -Djruby."${1#-X}" ;;
         # Match switches that take an argument
         -C|-e|-I|-S)
-            ruby_args="$ruby_args \$$i \$$((i + 1))"
-            cycle
+            # RUBY ARG
+            set -- "$@" "$1" "$2"
+            ruby_arg_indices="$ruby_arg_indices $i $((i + 1))"
+            shift
+            i=$((i + 1))
             ;;
         # Run with JMX management enabled
         --manage)
-            java_args="$java_args -Dcom.sun.management.jmxremote"
-            java_args="$java_args -Djruby.management.enabled=true"
+            set -- "$@" -Dcom.sun.management.jmxremote
+            set -- "$@" -Djruby.management.enabled=true
             ;;
         # Don't launch a GUI window, no matter what
-        --headless) java_args="$java_args -Djava.awt.headless=true" ;;
+        --headless) set -- "$@" -Djava.awt.headless=true ;;
         # Run under JDB
         --jdb)
             if [ -z "$JAVA_HOME" ]; then
@@ -407,7 +413,7 @@ do
                 fi
             fi
             JDB_SOURCEPATH="${JRUBY_HOME}/core/src/main/java:${JRUBY_HOME}/lib/ruby/stdlib:."
-            java_args="$java_args -sourcepath \$JDB_SOURCEPATH"
+            set -- "$@" -sourcepath $JDB_SOURCEPATH
             #JRUBY_OPTS+=("-X+C")
             ;;
         --client|--server|--noclient)
@@ -418,9 +424,9 @@ do
             # For OpenJ9 use environment variable to enable quickstart and shareclasses
             export OPENJ9_JAVA_OPTIONS="-Xquickstart -Xshareclasses"
             ;;
-        --sample) java_args="$java_args -Xprof" ;;
+        --sample) set -- "$@" -Xprof ;;
         --record)
-            java_args="$java_args -XX:+FlightRecorder -XX:StartFlightRecording=dumponexit=true"
+            set -- "$@" -XX:+FlightRecorder -XX:StartFlightRecording=dumponexit=true
             ;;
         --no-bootclasspath) NO_BOOTCLASSPATH=true ;;
         --ng*)
@@ -433,25 +439,29 @@ do
         # Abort processing on the double dash
         --) break ;;
         # Other opts go to ruby
-        -*) ruby_args="$ruby_args \$$i" ;;
+        # RUBY ARG
+        -*)
+            set -- "$@" "$1"
+            ruby_arg_indices="$ruby_arg_indices $i"
+            ;;
         # Abort processing on first non-opt arg
         *) break ;;
     esac
-    cycle
+    shift
+    i=$((i + 1))
 done
 
 # Force JDK to use specified java.security.egd rand source
 if [ -n "$JAVA_SECURITY_EGD" ]; then
-    java_args="$java_args -Djava.security.egd=\$JAVA_SECURITY_EGD"
+    set -- "$@" -Djava.security.egd=$JAVA_SECURITY_EGD
 fi
 
 # The rest of the arguments are for ruby
 while [ $i -le $# ]; do
     ruby_args="$ruby_args \${$i}"
-    cycle
+	shift
 done
 
-unalias cycle
 
 JAVA_OPTS="$JAVA_OPTS $JAVA_MEM $JAVA_STACK"
 
@@ -490,9 +500,6 @@ fi
 # ----- Module and Class Data Sharing flags for Java 9+ -----------------------
 
 if $use_modules; then
-    # Use module path instead of classpath for the jruby libs
-    classpath_args='--module-path $JRUBY_CP -classpath $CLASSPATH'
-
     # Switch to non-boot path since we can't use bootclasspath on 9+
     NO_BOOTCLASSPATH=true
 
@@ -512,35 +519,36 @@ if $use_modules; then
 
         JAVA_OPTS="$JAVA_OPTS -XX:+UnlockDiagnosticVMOptions -XX:SharedArchiveFile=$JRUBY_JSA"
     fi
-else
-    classpath_args='-classpath $JRUBY_CP$CP_DELIMITER$CLASSPATH'
 fi
 
 # ----- Final prepration of the Java command line -----------------------------
 
+if $NO_BOOTCLASSPATH || $VERIFY_JRUBY; then
+    if $use_modules; then
+        # Use module path instead of classpath for the jruby libs
+        set -- "$@" --module-path "$JRUBY_CP" -classpath "$CLASSPATH"
+    else
+        set -- "$@" -classpath "$JRUBY_CP$CP_DELIMITER$CLASSPATH"
+    fi
+else
+    set -- "$@" -Xbootclasspath/a:"$JRUBY_CP" \
+        -classpath "$CLASSPATH" -Djruby.home="$JRUBY_HOME"
+fi
+
 # Include all options from files at the beginning of the Java command line
 JAVA_OPTS="$java_opts_from_files $JAVA_OPTS"
 
-if $NO_BOOTCLASSPATH || $VERIFY_JRUBY; then
-    java_args="$java_args $classpath_args"
-else
-    java_args="$java_args"' -Xbootclasspath/a:$JRUBY_CP
-        -classpath $CLASSPATH -Djruby.home=$JRUBY_HOME'
-fi
+set -- "$@" -Djruby.home=$JRUBY_HOME \
+    -Djruby.lib="$JRUBY_HOME/lib" -Djruby.script=jruby \
+    -Djruby.shell="$JRUBY_SHELL" \
+    "$java_class" #"$ruby_args"
 
-java_args="$java_args"' -Djruby.home=$JRUBY_HOME
-    -Djruby.lib=$JRUBY_HOME/lib -Djruby.script=jruby
-    -Djruby.shell=$JRUBY_SHELL
-    $java_class '"$ruby_args"
-
-jvm_command_line="$JAVACMD $JAVA_OPTS $JFFI_OPTS"
-for arg in $java_args; do
-    eval "jvm_command_line=\"\$jvm_command_line $arg\""
-done
+# Don't quote JAVA_OPTS; we want it to expand
+set -- "$JAVACMD" $JAVA_OPTS "$JFFI_OPTS" "$@"
 
 add_log
 add_log "Java command line:"
-add_log "  $jvm_command_line"
+add_log "  $*"
 
 unset jvm_command_line
 
@@ -550,14 +558,6 @@ if $print_environment_log; then
 fi
 
 # ----- Run JRuby! ------------------------------------------------------------
-
-original_argc=$#
-# Don't quote JAVA_OPTS; we want it to expand
-set -- "$@" "$JAVACMD" $JAVA_OPTS "$JFFI_OPTS"
-for arg in $java_args; do
-    eval 'set -- "$@" '" \"$arg\" "
-done
-shift $original_argc
 
 if $use_exec; then
     exec "$@"
