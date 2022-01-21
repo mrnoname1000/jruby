@@ -186,39 +186,51 @@ add_log "  JAVA_OPTS: $JAVA_OPTS"
 # ----- Discover JVM and prep environment to run it ---------------------------
 
 # Determine where the java command is and ensure we have a good JAVA_HOME
-if [ -z "$JAVACMD" ]; then
-    if [ -z "$JAVA_HOME" ]; then
-        readonly java_home_command="/usr/libexec/java_home"
+get_java_home() {
+    if [ -z "$JAVACMD" ]; then
+        local java_home_command="/usr/libexec/java_home"
         if [ -r "$java_home_command" ] \
             && [ -x "$java_home_command" ] \
             && [ ! -d "$java_home_command" ]
         then
             # use java_home command when none is set (on MacOS)
-            JAVA_HOME="$("$java_home_command")"
-            JAVACMD="$JAVA_HOME"/bin/java
+            result="$("$java_home_command")"
         else
             # Linux and others have a chain of symlinks
             resolve_symlinks "$(command -v java)"
-            JAVACMD="$result"
-
-            # export separately from command execution
-            dir_name "$JAVACMD"
             dir_name "$result"
-            JAVA_HOME="$result"
+            dir_name "$result"
+            result="$result"
         fi
-    elif $cygwin; then
-        JAVACMD="$(cygpath -u "$JAVA_HOME")/bin/java"
     else
-        JAVACMD="$JAVA_HOME/bin/java"
+        resolve_symlinks "$(command -v "$JAVACMD")"
+        local expanded_javacmd="$result"
+        if [ -x "$expanded_javacmd" ]; then
+            dir_name "$expanded_javacmd"
+            dir_name "$result"
+            result="$result"
+        fi
     fi
-else
-    resolve_symlinks "$(command -v "$JAVACMD")"
-    expanded_javacmd="$result"
-    if [ -z "$JAVA_HOME" ] && [ -x "$expanded_javacmd" ]; then
-        dir_name "$expanded_javacmd"
-        dir_name "$result"
-        JAVA_HOME="$result"
+}
+get_java_cmd() {
+    if [ -z "$JAVA_HOME" ]; then
+        get_java_home
+        local JAVA_HOME="$result"
     fi
+
+    if $cygwin; then
+        result="$(cygpath -u "$JAVA_HOME")/bin/java"
+    else
+        result="$JAVA_HOME/bin/java"
+    fi
+}
+if [ -z "$JAVA_HOME" ]; then
+    get_java_home
+    JAVA_HOME="$result"
+fi
+if [ -z "$JAVACMD" ]; then
+    get_java_cmd
+    JAVACMD="$result"
 fi
 
 # Detect modularized Java if modules file is present or a MODULES line appears in release
