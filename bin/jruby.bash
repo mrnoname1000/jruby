@@ -504,28 +504,28 @@ fi
 JAVA_OPTS="$java_opts_from_files $JAVA_OPTS"
 
 # Don't quote JAVA_OPTS; we want it to expand
-jvm_command=("$JAVACMD" $JAVA_OPTS "$JFFI_OPTS" "${java_args[@]}")
+java_args=("$JAVACMD" $JAVA_OPTS "$JFFI_OPTS" "${java_args[@]}")
 
 if $NO_BOOTCLASSPATH || $VERIFY_JRUBY; then
     if $use_modules; then
         # Use module path instead of classpath for the jruby libs
-		jvm_command+=(--module-path "$JRUBY_CP" -classpath "$CLASSPATH")
+		java_args+=(--module-path "$JRUBY_CP" -classpath "$CLASSPATH")
     else
-		jvm_command+=(-classpath "$JRUBY_CP$CP_DELIMITER$CLASSPATH")
+		java_args+=(-classpath "$JRUBY_CP$CP_DELIMITER$CLASSPATH")
     fi
 else
-    jvm_command+=(-Xbootclasspath/a:"$JRUBY_CP" \
+    java_args+=(-Xbootclasspath/a:"$JRUBY_CP" \
         -classpath "$CLASSPATH" "-Djruby.home=$JRUBY_HOME")
 fi
 
-jvm_command+=("-Djruby.home=$JRUBY_HOME" \
+java_args+=("-Djruby.home=$JRUBY_HOME" \
     "-Djruby.lib=$JRUBY_HOME/lib" "-Djruby.script=jruby" \
     "-Djruby.shell=$JRUBY_SHELL" \
     "$java_class" "${ruby_args[@]}")
 
 add_log
 add_log "Java command line:"
-add_log "  ${jvm_command[*]}"
+add_log "  ${java_args[*]}"
 
 if $print_environment_log; then
     echo "$environment_log"
@@ -535,9 +535,9 @@ fi
 # ----- Run JRuby! ------------------------------------------------------------
 
 if $use_exec; then
-    exec "${jvm_command[@]}"
+    exec "${java_args[@]}"
 else
-    "${jvm_command[@]}"
+    "${java_args[@]}"
 
     # Record the exit status immediately, or it will be overridden.
     JRUBY_STATUS=$?
