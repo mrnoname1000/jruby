@@ -1,5 +1,6 @@
 #!/bin/sh
-# shellcheck disable=1007
+# shellcheck shell=dash
+# shellcheck disable=1007  # Don't complain about foo=
 # -----------------------------------------------------------------------------
 # jruby.bash - Start Script for the JRuby interpreter
 # -----------------------------------------------------------------------------
@@ -29,8 +30,7 @@ fi
 # Returns escaped arguments via $REPLY
 # Thanks to @mentalisttraceur for original implementation:
 # https://github.com/mentalisttraceur/esceval
-esceval()
-{
+esceval() {
     local escaped= unescaped= output=
     REPLY=
 
