@@ -24,6 +24,32 @@ fi
 
 # ----- Helper functions ------------------------------------------------------
 
+# assert COMMAND [ARGUMENT]...
+#
+# Exit if COMMAND returns a failure status
+assert() {
+    if ! "$@"; then
+        base_name "$0"
+        echo >&2 "$REPLY: Assertion failed: $*"
+        exit 3
+    fi
+}
+
+# isidentifier [ARGUMENT...]
+#
+# Check whether ARGUMENT is suitable for use as an identifier, i.e. contains
+# only alphanumeric characters and underscores, doesn't start with a number,
+# and isn't zero-length
+isidentifier() {
+    while [ "$#" -gt 0 ]; do
+        case $1 in
+            ([[:digit:]]* | *[!_[:alnum:]]* | '') return 1 ;;
+        esac
+        shift
+    done
+    return 0
+}
+
 # esceval [ARGUMENT...]
 #
 # Escape ARGUMENT for safe use with eval
@@ -59,6 +85,9 @@ esceval() {
 #
 # Assign ELEMENT to the list named by LISTNAME.
 assign() {
+    assert [ "$#" -gt 0 ]
+    assert isidentifier "$1"
+
     local listname="$1"
     local REPLY=
     shift
@@ -71,6 +100,9 @@ assign() {
 #
 # Append ELEMENT to the list named by LISTNAME.
 append() {
+    assert [ "$#" -gt 0 ]
+    assert isidentifier "$1"
+
     local listname="$1"
     local REPLY=
     shift
@@ -83,6 +115,9 @@ append() {
 #
 # Prepend ELEMENT to the list named by LISTNAME, preserving order.
 prepend() {
+    assert [ "$#" -gt 0 ]
+    assert isidentifier "$1"
+
     local listname="$1"
     local REPLY=
     shift
@@ -96,6 +131,10 @@ prepend() {
 # Append the elements stored in the list named by LISTNAME2
 # to the list named by LISTNAME1.
 extend() {
+    assert [ "$#" -eq 2 ]
+    assert isidentifier "$1"
+    assert isidentifier "$2"
+
     eval "$1=\"\${$1} \${$2}\""
 }
 
@@ -104,6 +143,10 @@ extend() {
 # Prepend the elements stored in the list named by LISTNAME2
 # to the named by LISTNAME1, preserving order.
 preextend() {
+    assert [ "$#" -eq 2 ]
+    assert isidentifier "$1"
+    assert isidentifier "$2"
+
     eval "$1=\"\${$2} \${$1}\""
 }
 
