@@ -53,6 +53,7 @@ import org.jruby.runtime.ClassIndex;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.JavaSites.FloatSites;
 import org.jruby.runtime.ObjectAllocator;
+import org.jruby.runtime.SimpleHash;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.runtime.marshal.MarshalDumper;
@@ -87,7 +88,7 @@ import static org.jruby.util.Numeric.nurat_rationalize_internal;
   * A representation of a float object
  */
 @JRubyClass(name="Float", parent="Numeric")
-public class RubyFloat extends RubyNumeric implements Appendable {
+public class RubyFloat extends RubyNumeric implements Appendable, SimpleHash {
     public static final int ROUNDS = 1;
     public static final int RADIX = 2;
     public static final int MANT_DIG = 53;
@@ -141,13 +142,13 @@ public class RubyFloat extends RubyNumeric implements Appendable {
     public RubyFloat(Ruby runtime, double value) {
         super(runtime.getFloat());
         this.value = value;
-        this.flags |= FROZEN_F;
+        this.setFrozen(true);
     }
 
     private RubyFloat(RubyClass klass, double value) {
         super(klass);
         this.value = value;
-        this.flags |= FROZEN_F;
+        this.setFrozen(true);
     }
 
     public RubyClass singletonClass(ThreadContext context) {
@@ -616,19 +617,23 @@ public class RubyFloat extends RubyNumeric implements Appendable {
     // MRI: flo_hash
     @JRubyMethod(name = "hash")
     public RubyFixnum hash(ThreadContext context) {
-        return asFixnum(context, floatHash(context.runtime, value));
+        return asFixnum(context, longHashCode());
     }
-
 
     @Override
     public final int hashCode() {
-        return (int) floatHash(getRuntime(), value);
+        return (int) longHashCode();
     }
 
-    private static long floatHash(Ruby runtime, double value) {
+    @Override
+    public long longHashCode() {
+        return floatHash(value);
+    }
+
+    private static long floatHash(double value) {
         final double val = value == 0.0 ? -0.0 : value;
         long hashLong = Double.doubleToLongBits(val);
-        return Helpers.multAndMix(runtime.getHashSeedK0(), hashLong);
+        return Helpers.multAndMix(Ruby.getHashSeed0(), hashLong);
     }
 
     @Deprecated(since = "10.0.0.0")
@@ -1160,7 +1165,7 @@ public class RubyFloat extends RubyNumeric implements Appendable {
     }
 
     public static void marshalTo(ThreadContext context, RubyOutputStream out, RubyFloat aFloat, MarshalDumper output) {
-        output.registerLinkTarget(aFloat);
+        output.registerObject(aFloat);
         output.writeString(out, aFloat.marshalDump(context));
     }
 

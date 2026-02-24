@@ -44,10 +44,12 @@ import org.jruby.exceptions.RaiseException;
 import org.jruby.javasupport.JavaUtil;
 import org.jruby.runtime.Arity;
 import org.jruby.runtime.Block;
+import org.jruby.runtime.Builtins;
 import org.jruby.runtime.CallSite;
 import org.jruby.runtime.ClassIndex;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.JavaSites;
+import org.jruby.runtime.SimpleHash;
 import org.jruby.runtime.ThreadContext;
 import org.jruby.runtime.Visibility;
 import org.jruby.runtime.builtin.IRubyObject;
@@ -280,7 +282,7 @@ public class RubyNumeric extends RubyObject {
      *
      */
     public static long num2long(IRubyObject arg) {
-        return arg instanceof RubyFixnum ? ((RubyFixnum) arg).value : other2long(arg);
+        return arg instanceof RubyFixnum ? ((RubyFixnum) arg).getValue() : other2long(arg);
     }
 
     @Deprecated(since = "10.0.0.0")
@@ -317,7 +319,7 @@ public class RubyNumeric extends RubyObject {
         // loop until we have a Numeric
         while (true) {
             if (arg instanceof RubyFixnum) {
-                return ((RubyFixnum) arg).value;
+                return ((RubyFixnum) arg).getValue();
             } else if (arg instanceof RubyBignum) {
                 return RubyBignum.big2ulong((RubyBignum) arg);
             } else if (arg instanceof RubyFloat) {
@@ -399,7 +401,7 @@ public class RubyNumeric extends RubyObject {
      */
     @Deprecated(since = "10.0.0.0")
     public static long fix2long(IRubyObject arg) {
-        return ((RubyFixnum) arg).value;
+        return ((RubyFixnum) arg).getValue();
     }
 
     @Deprecated(since = "10.0.0.0")
@@ -411,7 +413,7 @@ public class RubyNumeric extends RubyObject {
 
     @Deprecated(since = "10.0.0.0")
     public static int fix2int(RubyFixnum arg) {
-        long num = arg.value;
+        long num = arg.getValue();
         checkInt(arg, num);
         return (int) num;
     }
@@ -935,15 +937,8 @@ public class RubyNumeric extends RubyObject {
     public static boolean positiveInt(ThreadContext context, IRubyObject num) {
         JavaSites.CheckedSites gt = sites(context).op_gt_checked;
 
-        if (num instanceof RubyFixnum) {
-            if (gt.site.retrieveCache(num).method.isBuiltin()) {
-                return ((RubyFixnum) num).signum(context) == 1;
-            }
-        }
-        else if (num instanceof RubyBignum) {
-            if (gt.site.retrieveCache(num).method.isBuiltin()) {
-                return ((RubyBignum) num).signum() == 1;
-            }
+        if (num instanceof RubyInteger integer && Builtins.checkIntegerGt(context)) {
+            return integer.signum(context) == 1;
         }
         return compareNumberWithZero(context, num, gt).isTrue();
     }
@@ -952,15 +947,8 @@ public class RubyNumeric extends RubyObject {
     public static boolean negativeInt(ThreadContext context, IRubyObject num) {
         JavaSites.CheckedSites lt = sites(context).op_lt_checked;
 
-        if (num instanceof RubyFixnum) {
-            if (lt.site.retrieveCache(num).method.isBuiltin()) {
-                return ((RubyFixnum) num).signum(context) == -1;
-            }
-        }
-        else if (num instanceof RubyBignum) {
-            if (lt.site.retrieveCache(num).method.isBuiltin()) {
-                return ((RubyBignum) num).signum() == -1;
-            }
+        if (num instanceof RubyInteger integer && Builtins.checkIntegerLt(context)) {
+            return integer.signum(context) == -1;
         }
         return compareNumberWithZero(context, num, lt).isTrue();
     }
@@ -1191,7 +1179,7 @@ public class RubyNumeric extends RubyObject {
 
     // MRI: num_step_negative_p
     private static boolean numStepNegative(ThreadContext context, IRubyObject num) {
-        if (num instanceof RubyInteger in && context.sites.Integer.op_lt.isBuiltin(num)) return in.isNegativeNumber(context);
+        if (num instanceof RubyInteger in && Builtins.checkIntegerLt(context)) return in.isNegativeNumber(context);
 
         RubyFixnum zero = asFixnum(context, 0);
         IRubyObject r = getMetaClass(num).finvokeChecked(context, num, sites(context).op_gt_checked, zero);
@@ -1223,8 +1211,8 @@ public class RubyNumeric extends RubyObject {
 
     private static void fixnumStep(ThreadContext context, RubyFixnum from, IRubyObject to, RubyFixnum step,
                                    boolean inf, boolean desc, Block block) {
-        long i = from.value;
-        long diff = step.value;
+        long i = from.getValue();
+        long diff = step.getValue();
 
         if (inf) {
             for (;; i += diff) {
@@ -1279,12 +1267,12 @@ public class RubyNumeric extends RubyObject {
         if (from instanceof RubyFixnum && to instanceof RubyFixnum && step instanceof RubyFixnum) {
             long delta, diff;
 
-            diff = ((RubyFixnum) step).value;
+            diff = ((RubyFixnum) step).getValue();
             if (diff == 0) return asFloat(context, Double.POSITIVE_INFINITY);
 
             // overflow checking
-            long toLong = ((RubyFixnum) to).value;
-            long fromLong = ((RubyFixnum) from).value;
+            long toLong = ((RubyFixnum) to).getValue();
+            long fromLong = ((RubyFixnum) from).getValue();
             delta = toLong - fromLong;
             if (!Helpers.subtractionOverflowed(toLong, fromLong, delta)) {
                 if (diff < 0) {

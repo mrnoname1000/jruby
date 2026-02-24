@@ -64,6 +64,7 @@ import org.jruby.java.util.ArrayUtils;
 import org.jruby.javasupport.JavaUtil;
 import org.jruby.runtime.Arity;
 import org.jruby.runtime.Block;
+import org.jruby.runtime.Builtins;
 import org.jruby.runtime.CallSite;
 import org.jruby.runtime.ClassIndex;
 import org.jruby.runtime.Helpers;
@@ -403,9 +404,6 @@ public class RubyArray<T extends IRubyObject> extends RubyObject implements List
     public static final int ARRAY_DEFAULT_SIZE = 16;
     private static final int SMALL_ARRAY_LEN = 16;
 
-    private static final int TMPLOCK_ARR_F = 1 << 9;
-    private static final int TMPLOCK_OR_FROZEN_ARR_F = TMPLOCK_ARR_F | FROZEN_F;
-
     private volatile boolean isShared = false;
 
     protected IRubyObject[] values;
@@ -646,10 +644,7 @@ public class RubyArray<T extends IRubyObject> extends RubyObject implements List
      *
      */
     protected final void modifyCheck(ThreadContext context) {
-        if ((flags & TMPLOCK_OR_FROZEN_ARR_F) != 0) {
-            if ((flags & FROZEN_F) != 0) throw context.runtime.newFrozenError(this);
-            if ((flags & TMPLOCK_ARR_F) != 0) throw typeError(context, "can't modify array during iteration");
-        }
+        if (isFrozen()) throw context.runtime.newFrozenError(this);
     }
 
     @Deprecated(since = "10.0.0.0")
@@ -889,8 +884,8 @@ public class RubyArray<T extends IRubyObject> extends RubyObject implements List
 
         for (int i = 0; i < realLength; i++) {
             IRubyObject value = eltOk(i);
-            RubyFixnum n = Helpers.safeHash(context, value);
-            h = murmurCombine(h, n.value);
+            long n = Helpers.safeHashLong(context, value);
+            h = murmurCombine(h, n);
         }
 
         return hashEnd(h);
@@ -1725,15 +1720,6 @@ public class RubyArray<T extends IRubyObject> extends RubyObject implements List
         return asBoolean(context, includes(context, item));
     }
 
-    /** rb_ary_frozen_p
-     *
-     */
-    @JRubyMethod(name = "frozen?")
-    @Override
-    public RubyBoolean frozen_p(ThreadContext context) {
-        return asBoolean(context, isFrozen() || (flags & TMPLOCK_ARR_F) != 0);
-    }
-
     /**
      * Variable arity version for compatibility. Not bound to a Ruby method.
      * @deprecated Use the versions with zero, one, or two args.
@@ -1818,7 +1804,7 @@ public class RubyArray<T extends IRubyObject> extends RubyObject implements List
     public IRubyObject aset(ThreadContext context, IRubyObject arg0, IRubyObject arg1) {
         modifyCheck(context);
         if (arg0 instanceof RubyFixnum) {
-            store(((RubyFixnum) arg0).value, arg1);
+            store(((RubyFixnum) arg0).getValue(), arg1);
         } else if (arg0 instanceof RubyRange range) {
             int beg0 = checkLongForInt(context, range.begLen0(context, realLength));
             int beg1 = checkLongForInt(context, range.begLen1(context, realLength, beg0));
@@ -4060,8 +4046,8 @@ public class RubyArray<T extends IRubyObject> extends RubyObject implements List
         DefaultComparator(ThreadContext context, final boolean honorOverride) {
             this.context = context;
             if ( honorOverride && context != null ) {
-                this.fixnumBypass = !honorOverride || fixnumClass(context).isMethodBuiltin("<=>");
-                this.stringBypass = !honorOverride || stringClass(context).isMethodBuiltin("<=>");
+                this.fixnumBypass = !honorOverride || Builtins.checkIntegerCmp(context);
+                this.stringBypass = !honorOverride || Builtins.checkStringCmp(context);
             }
             else { // no-opt
                 this.fixnumBypass = false;
@@ -5111,7 +5097,7 @@ public class RubyArray<T extends IRubyObject> extends RubyObject implements List
         IRubyObject value = null;
 
         if (is_fixnum) {
-            long sum = ((RubyFixnum) result).value;
+            long sum = ((RubyFixnum) result).getValue();
 fixnum_loop:
             for (; i < realLength; value=null, i++) {
                 if (value == null) {
@@ -5124,7 +5110,7 @@ fixnum_loop:
                 if (value instanceof RubyFixnum) {
                     /* should not overflow long type */
                     try {
-                        sum = Math.addExact(sum, ((RubyFixnum) value).value);
+                        sum = Math.addExact(sum, ((RubyFixnum) value).getValue());
                     } catch (ArithmeticException ae) {
                         is_bignum = true;
                         break fixnum_loop;
@@ -5163,7 +5149,7 @@ bignum_loop:
                 }
 
                 if (value instanceof RubyFixnum) {
-                    final long val = ((RubyFixnum) value).value;
+                    final long val = ((RubyFixnum) value).getValue();
                     sum = sum.add(BigInteger.valueOf(val));
                 } else if (value instanceof RubyBignum) {
                     sum = sum.add(((RubyBignum) value).value);
@@ -5338,7 +5324,7 @@ float_loop:
     }
 
     public static void marshalTo(ThreadContext context, RubyOutputStream out, RubyArray array, MarshalDumper output) {
-        output.registerLinkTarget(array);
+        output.registerObject(array);
 
         int length = array.realLength;
 
