@@ -124,8 +124,6 @@ public class Mutex extends RubyObject implements DataType {
             }
         }
 
-        this.lockingThread = parentThread;
-
         // always check for thread interrupts after acquiring lock
         try {
             thread.pollThreadEvents(context);
@@ -136,6 +134,9 @@ public class Mutex extends RubyObject implements DataType {
             }
             Helpers.throwException(t);
         }
+
+        // set locking thread once successfully locked with no interrupts
+        this.lockingThread = parentThread;
 
         return this;
     }
