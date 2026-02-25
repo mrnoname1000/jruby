@@ -53,7 +53,6 @@ import org.jruby.runtime.Arity;
 import org.jruby.runtime.Block;
 import org.jruby.runtime.Builtins;
 import org.jruby.runtime.CallBlock19;
-import org.jruby.runtime.ClassIndex;
 import org.jruby.runtime.Helpers;
 import org.jruby.runtime.JavaSites.HashSites;
 import org.jruby.runtime.Signature;
@@ -81,21 +80,22 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 
-import static org.jruby.RubyEnumerator.enumeratorizeWithSize;
 import static org.jruby.RubyEnumerator.SizeFn;
-import static org.jruby.api.Access.arrayClass;
+import static org.jruby.RubyEnumerator.enumeratorizeWithSize;
 import static org.jruby.api.Access.hashClass;
 import static org.jruby.api.Convert.asBoolean;
 import static org.jruby.api.Convert.asFixnum;
 import static org.jruby.api.Create.newArray;
 import static org.jruby.api.Create.newSharedString;
-import static org.jruby.api.Define.defineClass;
-import static org.jruby.api.Error.*;
+import static org.jruby.api.Error.argumentError;
+import static org.jruby.api.Error.runtimeError;
+import static org.jruby.api.Error.typeError;
 import static org.jruby.api.Warn.warn;
 import static org.jruby.runtime.ThreadContext.hasKeywords;
 import static org.jruby.runtime.ThreadContext.resetCallInfo;
 import static org.jruby.runtime.Visibility.PRIVATE;
-import static org.jruby.util.Inspector.*;
+import static org.jruby.util.Inspector.EMPTY_HASH_BL;
+import static org.jruby.util.Inspector.RECURSIVE_HASH_BL;
 
 // Design overview:
 //
@@ -134,176 +134,67 @@ import static org.jruby.util.Inspector.*;
  *
  */
 @JRubyClass(name = "Hash", include="Enumerable")
-public class RubyHash extends RubyObject implements Map {
-    public static final int DEFAULT_INSPECT_STR_SIZE = 20;
-
-    private byte hashFlags;
-
-    private static final byte COMPARE_BY_IDENTITY = 0b00000001;
-    private static final byte RUBY2_KEYWORD = 0b00000010;
-    private static final byte PROCDEFAULT_HASH = 0b00000100;
-
-    @Deprecated(since = "10.0.3.0")
-    public static final int COMPARE_BY_IDENTITY_F = COMPARE_BY_IDENTITY;
-    @Deprecated(since = "10.0.3.0")
-    public static final int RUBY2_KEYWORD_F = RUBY2_KEYWORD;
-    @Deprecated(since = "10.0.3.0")
-    private static final int PROCDEFAULT_HASH_F = PROCDEFAULT_HASH;
-
-    public static RubyClass createHashClass(ThreadContext context, RubyClass Object, RubyModule Enumerable) {
-        return defineClass(context, "Hash", Object, RubyHash::new).
-                reifiedClass(RubyHash.class).
-                kindOf(new RubyModule.JavaClassKindOf(RubyHash.class)).
-                classIndex(ClassIndex.HASH).
-                include(context, Enumerable).
-                defineMethods(context, RubyHash.class);
-    }
-
-    @Override
-    public ClassIndex getNativeClassIndex() {
-        return ClassIndex.HASH;
-    }
-
-    /** rb_hash_s_create
-     *
-     */
-    @JRubyMethod(name = "[]", rest = true, meta = true)
-    public static IRubyObject create(ThreadContext context, IRubyObject recv, IRubyObject[] args, Block block) {
-        if (args.length == 1) {
-            IRubyObject tmp = TypeConverter.convertToTypeWithCheck(args[0], hashClass(context), "to_hash");
-            if (!tmp.isNil()) return new RubyHash(context.runtime, (RubyClass) recv, (RubyHash) tmp);
-
-            var Array = arrayClass(context);
-            final IRubyObject nil = context.nil;
-            tmp = TypeConverter.convertToTypeWithCheck(args[0], Array, "to_ary");
-            if (tmp != nil) {
-                RubyHash hash = (RubyHash) ((RubyClass) recv).allocate(context);
-                var arr = (RubyArray<?>) tmp;
-                for (int i = 0, j = arr.getLength(); i<j; i++) {
-                    IRubyObject e = arr.entry(i);
-                    IRubyObject v = TypeConverter.convertToTypeWithCheck(e, Array, "to_ary");
-                    IRubyObject key;
-                    IRubyObject val = nil;
-                    if (v == nil) {
-                        throw argumentError(context, "wrong element type " + e.getMetaClass() + " at " + i + " (expected array)");
-                    }
-                    switch (((RubyArray<?>) v).getLength()) {
-                    default:
-                        throw argumentError(context, "invalid number of elements (" + ((RubyArray<?>) v).getLength() + " for 1..2)");
-                    case 2:
-                        val = ((RubyArray<?>) v).entry(1);
-                    case 1:
-                        key = ((RubyArray<?>) v).entry(0);
-                        hash.fastASetCheckString(context.runtime, key, val);
-                    }
-                }
-                return hash;
-            }
-        }
-
-        if ((args.length & 1) != 0) throw argumentError(context, "odd number of arguments for Hash");
-
-        RubyHash hash = (RubyHash) ((RubyClass) recv).allocate(context);
-        for (int i=0; i < args.length; i+=2) hash.fastASetCheckString(context.runtime, args[i], args[i+1]);
-
-        return hash;
-    }
-
-    @JRubyMethod(name = "try_convert", meta = true)
-    public static IRubyObject try_convert(ThreadContext context, IRubyObject recv, IRubyObject args) {
-        return TypeConverter.convertToTypeWithCheck(args, hashClass(context), "to_hash");
-    }
-
-    /** rb_hash_new
-     *
-     */
-    public static final RubyHash newHash(Ruby runtime) {
-        return new RubyHash(runtime);
-    }
-
-    /** rb_hash_new
-     *
-     */
-    public static final RubyHash newSmallHash(Ruby runtime) {
-        return new RubyHash(runtime, 1);
-    }
-
-    public static RubyHash newKwargs(Ruby runtime, String key, IRubyObject value) {
-        return newHash(runtime, runtime.newSymbol(key), value);
-    }
-
-    public static RubyHash newHash(Ruby runtime, IRubyObject key, IRubyObject value) {
-        RubyHash kwargs = newSmallHash(runtime);
-        kwargs.fastASetSmall(key, value);
-        return kwargs;
-    }
-
-    /** rb_hash_new
-     *
-     */
-    public static final RubyHash newHash(Ruby runtime, Map valueMap, IRubyObject defaultValue) {
-        assert defaultValue != null;
-
-        return new RubyHash(runtime, valueMap, defaultValue);
-    }
-
-    private RubyHashEntry[] table;
+public class RubyHashLinkedBuckets extends RubyHash {
     protected int size = 0;
     private int threshold;
 
+    private byte hashFlags;
     private IRubyObject ifNone;
 
-    private RubyHash(Ruby runtime, RubyClass klass, RubyHash other) {
-        super(runtime, klass);
+    private int generation = 0; // generation count for O(1) clears
+    private final RubyHashLinkedBuckets.RubyHashEntry head = new RubyHashLinkedBuckets.RubyHashEntry();
+
+    RubyHashLinkedBuckets(Ruby runtime, RubyClass klass, RubyHash other) {
+        super(runtime, klass, true, 0);
         this.ifNone = UNDEF;
         copyFrom(this, other, false);
     }
 
-    private static void copyFrom(RubyHash self, RubyHash other, boolean identity) {
-        self.threshold = other.threshold;
-        self.table = other.internalCopyTable(self.head);
-        self.size = other.size();
-        self.setComparedByIdentity(identity);
-    }
-
-    public RubyHash(Ruby runtime, RubyClass klass) {
-        super(runtime, klass);
+    protected RubyHashLinkedBuckets(Ruby runtime, RubyClass klass) {
+        super(runtime, klass, true, 0);
         this.ifNone = UNDEF;
         allocFirst();
     }
 
-    public RubyHash(Ruby runtime, int buckets) {
+    RubyHashLinkedBuckets(Ruby runtime, RubyClass klass, boolean objectSpace) {
+        super(runtime, klass, objectSpace, 0);
+        this.ifNone = UNDEF;
+        allocFirst();
+    }
+
+    protected RubyHashLinkedBuckets(Ruby runtime, int buckets) {
         this(runtime, UNDEF, buckets);
     }
 
-    public RubyHash(Ruby runtime) {
+    protected RubyHashLinkedBuckets(Ruby runtime) {
         this(runtime, UNDEF);
     }
 
-    public RubyHash(Ruby runtime, IRubyObject defaultValue) {
-        super(runtime, runtime.getHash());
+    protected RubyHashLinkedBuckets(Ruby runtime, IRubyObject defaultValue) {
+        super(runtime, runtime.getHash(), true, 0);
         this.ifNone = defaultValue;
         allocFirst();
     }
 
-    public RubyHash(Ruby runtime, IRubyObject defaultValue, int buckets) {
+    protected RubyHashLinkedBuckets(Ruby runtime, IRubyObject defaultValue, int buckets) {
         this(runtime, buckets, true);
         this.ifNone = defaultValue;
     }
 
-    protected RubyHash(Ruby runtime, RubyClass metaClass, IRubyObject defaultValue, RubyHashEntry[] initialTable, int threshold) {
-        super(runtime, metaClass);
+    protected RubyHashLinkedBuckets(Ruby runtime, RubyClass metaClass, IRubyObject defaultValue, RubyHashEntry[] initialTable, int threshold) {
+        super(runtime, metaClass, true, 0);
         this.ifNone = defaultValue;
         this.threshold = threshold;
-        this.table = initialTable;
+        this.setTable(initialTable);
     }
 
     /*
      *  Constructor for internal usage (mainly for Array#|, Array#&, Array#- and Array#uniq)
      *  it doesn't initialize ifNone field
      */
-    RubyHash(Ruby runtime, int buckets, boolean objectSpace) {
-        super(runtime, runtime.getHash(), objectSpace);
+    RubyHashLinkedBuckets(Ruby runtime, int buckets, boolean objectSpace) {
+        super(runtime, runtime.getHash(), objectSpace, 0);
+        this.ifNone = UNDEF;
         // FIXME: current hash implementation cannot deal with no buckets so we will add a single one
         //  (this constructor will go away once open addressing is added back ???)
         if (buckets <= 0) buckets = 1;
@@ -311,26 +202,68 @@ public class RubyHash extends RubyObject implements Map {
     }
 
     // TODO should this be deprecated ? (to be efficient, internals should deal with RubyHash directly)
-    public RubyHash(Ruby runtime, Map valueMap, IRubyObject defaultValue) {
-        super(runtime, runtime.getHash());
+    RubyHashLinkedBuckets(Ruby runtime, Map valueMap, IRubyObject defaultValue) {
+        super(runtime, runtime.getHash(), true, 0);
         this.ifNone = defaultValue;
         allocFirst();
 
         for (Iterator iter = valueMap.entrySet().iterator();iter.hasNext();) {
-            Map.Entry e = (Map.Entry)iter.next();
+            Entry e = (Entry)iter.next();
             internalPut((IRubyObject)e.getKey(), (IRubyObject)e.getValue());
         }
     }
 
+    private static void copyFrom(RubyHashLinkedBuckets self, RubyHash other, boolean identity) {
+        if (other instanceof RubyHashLinkedBuckets lbOther) {
+            self.threshold = lbOther.threshold;
+            self.setTable(lbOther.internalCopyTable(self.head));
+            self.size = other.size();
+        }
+
+        self.setComparedByIdentity(identity);
+    }
+
+    public static RubyHashLinkedBuckets newLBHash(Ruby runtime, int buckets) {
+        return new RubyHashLinkedBuckets(runtime, buckets);
+    }
+
+    public static RubyHashLinkedBuckets newLBHash(Ruby runtime, int buckets, boolean objectSpace) {
+        return new RubyHashLinkedBuckets(runtime, buckets, objectSpace);
+    }
+
+    public static RubyHashLinkedBuckets newLBHash(Ruby runtime) {
+        return new RubyHashLinkedBuckets(runtime);
+    }
+
+    public static RubyHashLinkedBuckets newLBHash(Ruby runtime, IRubyObject defaultValue) {
+        return new RubyHashLinkedBuckets(runtime, defaultValue);
+    }
+
+    public static RubyHashLinkedBuckets newLBHash(Ruby runtime, IRubyObject defaultValue, int buckets) {
+        return new RubyHashLinkedBuckets(runtime, defaultValue, buckets);
+    }
+
+    protected void set(int flag, boolean set) {
+        if (set) {
+            hashFlags |= flag;
+        } else {
+            hashFlags &= ~flag;
+        }
+    }
+
+    protected boolean get(int flag) {
+        return (hashFlags & flag) != 0;
+    }
+
     private final void allocFirst() {
         threshold = INITIAL_THRESHOLD;
-        table = new RubyHashEntry[MRI_HASH_RESIZE ? MRI_INITIAL_CAPACITY : JAVASOFT_INITIAL_CAPACITY];
+        setTable(new RubyHashEntry[MRI_HASH_RESIZE ? MRI_INITIAL_CAPACITY : JAVASOFT_INITIAL_CAPACITY]);
     }
 
     private final void allocFirst(int buckets) {
         if (buckets <= 0) throw new ArrayIndexOutOfBoundsException("invalid bucket size: " + buckets);
         threshold = INITIAL_THRESHOLD;
-        table = new RubyHashEntry[buckets];
+        setTable(new RubyHashEntry[buckets]);
     }
 
     private final void alloc() {
@@ -358,114 +291,7 @@ public class RubyHash extends RubyObject implements Map {
     private static final int INITIAL_THRESHOLD = JAVASOFT_INITIAL_CAPACITY - (JAVASOFT_INITIAL_CAPACITY >> 2);
     private static final int MAXIMUM_CAPACITY = 1 << 30;
 
-    public static final RubyHashEntry NO_ENTRY = new RubyHashEntry();
-    private int generation = 0; // generation count for O(1) clears
-    private final RubyHashEntry head = new RubyHashEntry();
-
     { head.prevAdded = head.nextAdded = head; }
-
-    public static final class RubyHashEntry implements Map.Entry {
-        final IRubyObject key;
-        IRubyObject value;
-        private RubyHashEntry next;
-        private RubyHashEntry prevAdded;
-        private RubyHashEntry nextAdded;
-        private final int hash;
-
-        RubyHashEntry() {
-            key = NEVER;
-            hash = -1;
-        }
-
-        public RubyHashEntry(int h, IRubyObject k, IRubyObject v, RubyHashEntry e, RubyHashEntry head) {
-            key = k;
-            value = v;
-            next = e;
-            hash = h;
-
-            if (head != null) {
-                RubyHashEntry prevAdded = head.prevAdded;
-                RubyHashEntry nextAdded = head;
-
-                this.prevAdded = prevAdded;
-                prevAdded.nextAdded = this;
-
-                this.nextAdded = nextAdded;
-                nextAdded.prevAdded = this;
-            }
-        }
-
-        public RubyHashEntry(RubyHashEntry oldEntry, int newHash) {
-            this.hash = newHash;
-            this.key = oldEntry.key;
-            this.value = oldEntry.value;
-            this.next = oldEntry.next;
-
-            // prevAdded is never null
-            RubyHashEntry prevAdded = oldEntry.prevAdded;
-            this.prevAdded = prevAdded;
-            prevAdded.nextAdded = this;
-
-            RubyHashEntry nextAdded = oldEntry.nextAdded;
-            if (nextAdded != null) {
-                this.nextAdded = nextAdded;
-                nextAdded.prevAdded = this;
-            }
-        }
-
-        public void detach() {
-            if (prevAdded != null) {
-                prevAdded.nextAdded = nextAdded;
-                nextAdded.prevAdded = prevAdded;
-                prevAdded = null;
-            }
-        }
-
-        public boolean isLive() {
-            return prevAdded != null;
-        }
-
-        @Override
-        public Object getKey() {
-            return key;
-        }
-        public Object getJavaifiedKey(){
-            return key.toJava(Object.class);
-        }
-
-        @Override
-        public Object getValue() {
-            return value;
-        }
-        public Object getJavaifiedValue() {
-            return value.toJava(Object.class);
-        }
-
-        @Override
-        public Object setValue(Object value) {
-            IRubyObject oldValue = this.value;
-            if (value instanceof IRubyObject) {
-                this.value = (IRubyObject)value;
-            } else {
-                throw new UnsupportedOperationException("directEntrySet() doesn't support setValue for non IRubyObject instance entries, convert them manually or use entrySet() instead");
-            }
-            return oldValue;
-        }
-
-        @Override
-        public boolean equals(Object other){
-            if(!(other instanceof RubyHashEntry)) return false;
-            RubyHashEntry otherEntry = (RubyHashEntry)other;
-
-            return (key == otherEntry.key || key.eql(otherEntry.key)) &&
-                    (value == otherEntry.value || value.equals(otherEntry.value));
-        }
-
-        @Override
-        public int hashCode(){
-            return key.hashCode() ^ value.hashCode();
-        }
-    }
 
     private static int JavaSoftHashValue(int h) {
         h ^= (h >>> 20) ^ (h >>> 12);
@@ -486,7 +312,7 @@ public class RubyHash extends RubyObject implements Map {
     }
 
     private final synchronized void resize(int newCapacity) {
-        final RubyHashEntry[] oldTable = table;
+        final RubyHashEntry[] oldTable = getTable();
         final RubyHashEntry[] newTable = new RubyHashEntry[newCapacity];
 
         for (int j = 0; j < oldTable.length; j++) {
@@ -502,17 +328,17 @@ public class RubyHash extends RubyObject implements Map {
             }
         }
 
-        table = newTable;
+        setTable(newTable);
     }
 
     private final void JavaSoftCheckResize() {
         if (overThreshold()) {
-            RubyHashEntry[] tbl = table;
+            RubyHashEntry[] tbl = getTable();
             if (tbl.length == MAXIMUM_CAPACITY) {
                 threshold = Integer.MAX_VALUE;
                 return;
             }
-            resizeAndAdjustThreshold(table);
+            resizeAndAdjustThreshold(getTable());
         }
     }
 
@@ -529,8 +355,8 @@ public class RubyHash extends RubyObject implements Map {
     private static final int MIN_CAPA = 8;
     private static final int ST_DEFAULT_MAX_DENSITY = 2;
     private final void MRICheckResize() {
-        if (size / table.length > ST_DEFAULT_MAX_DENSITY) {
-            int forSize = table.length + 1; // size + 1;
+        if (size / getTable().length > ST_DEFAULT_MAX_DENSITY) {
+            int forSize = getTable().length + 1; // size + 1;
             for (int i=0, newCapacity = MIN_CAPA; i < MRI_PRIMES.length; i++, newCapacity <<= 1) {
                 if (newCapacity > forSize) {
                     resize(MRI_PRIMES[i]);
@@ -580,23 +406,16 @@ public class RubyHash extends RubyObject implements Map {
     }
 
     final boolean internalPutIfNoKey(final IRubyObject key, final IRubyObject value) {
-        if (internalGetEntry(key) == NO_ENTRY) {
+        if (internalGetEntry(key) == NULL_ENTRY) {
             internalPut(key, value);
             return true;
         }
         return false;
     }
 
-    @Deprecated(since = "9.2.9.0") // no longer used
-    protected final IRubyObject internalJavaPut(final IRubyObject key, final IRubyObject value) {
-        checkResize();
-
-        return internalPutNoResize(key, value, true);
-    }
-
     protected IRubyObject internalPutNoResize(final IRubyObject key, final IRubyObject value, final boolean checkForExisting) {
         final int hash = hashValue(key);
-        final RubyHashEntry[] table = this.table;
+        final RubyHashEntry[] table = this.getTable();
 
         final int i = bucketIndex(hash, table.length);
 
@@ -627,19 +446,21 @@ public class RubyHash extends RubyObject implements Map {
     }
 
     protected RubyHashEntry internalGetEntry(IRubyObject key) {
-        if (size == 0) return NO_ENTRY;
+        if (size == 0) return NULL_ENTRY;
 
         final int hash = hashValue(key);
-        final RubyHashEntry[] table = this.table;
+        final RubyHashEntry[] table = this.getTable();
 
         for (RubyHashEntry entry = table[bucketIndex(hash, table.length)]; entry != null; entry = entry.next) {
             if (internalKeyExist(entry.hash, entry.key, hash, key)) {
                 return entry;
             }
         }
-        return NO_ENTRY;
+        return NULL_ENTRY;
     }
 
+    @Deprecated
+    @Override
     final RubyHashEntry getEntry(IRubyObject key) {
         return internalGetEntry(key);
     }
@@ -653,7 +474,7 @@ public class RubyHash extends RubyObject implements Map {
 
 
     protected RubyHashEntry internalDelete(final IRubyObject key) {
-        if (size == 0) return NO_ENTRY;
+        if (size == 0) return NULL_ENTRY;
 
         return internalDelete(hashValue(key), MATCH_KEY, key);
     }
@@ -664,9 +485,9 @@ public class RubyHash extends RubyObject implements Map {
     }
 
     private final RubyHashEntry internalDelete(final int hash, final EntryMatchType matchType, final Object obj) {
-        final int i = bucketIndex(hash, table.length);
+        final int i = bucketIndex(hash, getTable().length);
 
-        RubyHashEntry entry = table[i];
+        RubyHashEntry entry = getTable()[i];
         if (entry != null) {
             RubyHashEntry prior = null;
             for (; entry != null; prior = entry, entry = entry.next) {
@@ -674,7 +495,7 @@ public class RubyHash extends RubyObject implements Map {
                     if (prior != null) {
                         prior.next = entry.next;
                     } else {
-                        table[i] = entry.next;
+                        getTable()[i] = entry.next;
                     }
                     entry.detach();
                     size--;
@@ -683,7 +504,15 @@ public class RubyHash extends RubyObject implements Map {
             }
         }
 
-        return NO_ENTRY;
+        return NULL_ENTRY;
+    }
+
+    private RubyHashEntry[] getTable() {
+        return (RubyHashEntry[]) state;
+    }
+
+    private void setTable(RubyHashEntry[] table) {
+        this.state = table;
     }
 
     private static abstract class EntryMatchType {
@@ -706,28 +535,13 @@ public class RubyHash extends RubyObject implements Map {
     };
 
     private final RubyHashEntry[] internalCopyTable(RubyHashEntry destHead) {
-         RubyHashEntry[]newTable = new RubyHashEntry[table.length];
+         RubyHashEntry[]newTable = new RubyHashEntry[getTable().length];
 
          for (RubyHashEntry entry = head.nextAdded; entry != head; entry = entry.nextAdded) {
-             int i = bucketIndex(entry.hash, table.length);
+             int i = bucketIndex(entry.hash, getTable().length);
              newTable[i] = new RubyHashEntry(entry.hash, entry.key, entry.value, newTable[i], destHead);
          }
          return newTable;
-    }
-
-    public interface VisitorWithStateI {
-        void visit(ThreadContext context, RubyHash self, IRubyObject key, IRubyObject value, int index);
-    }
-
-    public static abstract class VisitorWithState<T> {
-        public abstract void visit(ThreadContext context, RubyHash self, IRubyObject key, IRubyObject value, int index, T state);
-    }
-
-    public static abstract class Visitor extends VisitorWithState {
-        public void visit(ThreadContext context, RubyHash self, IRubyObject key, IRubyObject value, int index, Object state) {
-            visit(key, value);
-        }
-        public abstract void visit(IRubyObject key, IRubyObject value);
     }
 
     public <T> void visitAll(ThreadContext context, VisitorWithStateI visitor) {
@@ -757,7 +571,7 @@ public class RubyHash extends RubyObject implements Map {
         visitLimited(context, visitor, -1, state);
     }
 
-    private <T> void visitLimited(ThreadContext context, VisitorWithState visitor, long size, T state) {
+    protected <T> void visitLimited(ThreadContext context, VisitorWithState visitor, long size, T state) {
         int startGeneration = generation;
         long count = size;
         int index = 0;
@@ -815,7 +629,7 @@ public class RubyHash extends RubyObject implements Map {
 
         if (block.isGiven()) {
             ifNone = context.runtime.newProc(Block.Type.PROC, block);
-            hashFlags |= PROCDEFAULT_HASH;
+            set(PROCDEFAULT_HASH, true);
         } else {
             ifNone = UNDEF;
         }
@@ -828,13 +642,13 @@ public class RubyHash extends RubyObject implements Map {
         modify();
 
         if (keywords) {
-            IRubyObject[] opts = ArgsUtil.extractKeywordArgs(context, (RubyHash) _default, "capacity");
+            IRubyObject[] opts = ArgsUtil.extractKeywordArgs(context, (RubyHashLinkedBuckets) _default, "capacity");
             // This will allocFirst twice since it already happened before initialize was called.  I think this is ok?
             if (opts[0] instanceof RubyFixnum fixnum && fixnum.asInt(context) > 0) allocFirst(fixnum.asInt(context));
 
             if (block.isGiven()) {
                 ifNone = context.runtime.newProc(Block.Type.PROC, block);
-                hashFlags |= PROCDEFAULT_HASH;
+                set(PROCDEFAULT_HASH, true);
             } else {
                 ifNone = UNDEF;
             }
@@ -851,7 +665,7 @@ public class RubyHash extends RubyObject implements Map {
     public IRubyObject initialize(ThreadContext context, IRubyObject _default, IRubyObject hash, final Block block) {
         if (!hasKeywords(resetCallInfo(context))) throw argumentError(context, 2, 0, 1);
 
-        IRubyObject[] opts = ArgsUtil.extractKeywordArgs(context, (RubyHash) hash, "capacity");
+        IRubyObject[] opts = ArgsUtil.extractKeywordArgs(context, (RubyHashLinkedBuckets) hash, "capacity");
 
         // This will allocFirst twice since it already happened before initialize was called.  I think this is ok?
         if (opts[0] instanceof RubyFixnum fixnum && fixnum.asInt(context) > 0) allocFirst(fixnum.asInt(context));
@@ -867,7 +681,7 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod(name = "default")
     public IRubyObject default_value_get(ThreadContext context) {
-        if ((hashFlags & PROCDEFAULT_HASH) != 0) {
+        if (get(PROCDEFAULT_HASH)) {
             return context.nil;
         }
         return ifNone == UNDEF ? context.nil : ifNone;
@@ -875,7 +689,7 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod(name = "default")
     public IRubyObject default_value_get(ThreadContext context, IRubyObject arg) {
-        if ((hashFlags & PROCDEFAULT_HASH) != 0) {
+        if (get(PROCDEFAULT_HASH)) {
             return sites(context).call.call(context, ifNone, ifNone, this, arg);
         }
         return ifNone == UNDEF ? context.nil : ifNone;
@@ -889,7 +703,7 @@ public class RubyHash extends RubyObject implements Map {
         modify();
 
         ifNone = defaultValue;
-        hashFlags &= ~PROCDEFAULT_HASH;
+        set(PROCDEFAULT_HASH, false);
 
         return ifNone;
     }
@@ -899,7 +713,7 @@ public class RubyHash extends RubyObject implements Map {
      */
     @JRubyMethod
     public IRubyObject default_proc(ThreadContext context) {
-        return (hashFlags & PROCDEFAULT_HASH) != 0 ? ifNone : context.nil;
+        return get(PROCDEFAULT_HASH) ? ifNone : context.nil;
     }
 
     /** default_proc_arity_check
@@ -923,7 +737,7 @@ public class RubyHash extends RubyObject implements Map {
 
         if (proc.isNil()) {
             ifNone = proc;
-            hashFlags &= ~PROCDEFAULT_HASH;
+            set(PROCDEFAULT_HASH, false);
             return proc;
         }
 
@@ -933,7 +747,7 @@ public class RubyHash extends RubyObject implements Map {
         proc = b;
         checkDefaultProcArity(context, ((RubyProc) proc).getBlock());
         ifNone = proc;
-        hashFlags |= PROCDEFAULT_HASH;
+        set(PROCDEFAULT_HASH, true);
         return proc;
     }
 
@@ -1067,7 +881,7 @@ public class RubyHash extends RubyObject implements Map {
      *
      * @see SizeFn#size(ThreadContext, IRubyObject, IRubyObject[])
      */
-    private static IRubyObject size(ThreadContext context, RubyHash recv, IRubyObject[] args) {
+    private static IRubyObject size(ThreadContext context, RubyHashLinkedBuckets recv, IRubyObject[] args) {
         return recv.rb_size(context);
     }
 
@@ -1089,7 +903,7 @@ public class RubyHash extends RubyObject implements Map {
         try {
             final RubyArray result = RubyArrayNative.newBlankArrayInternal(runtime, size);
 
-            visitAll(context, RubyHash.StoreKeyValueVisitor, result);
+            visitAll(context, RubyHashLinkedBuckets.StoreKeyValueVisitor, result);
 
             return result;
         } catch (NegativeArraySizeException nase) {
@@ -1120,7 +934,7 @@ public class RubyHash extends RubyObject implements Map {
         if (iteratorCount > 0) throw runtimeError(context, "rehash during iteration");
 
         modify();
-        final RubyHashEntry[] oldTable = table;
+        final RubyHashEntry[] oldTable = getTable();
         final RubyHashEntry[] newTable = new RubyHashEntry[oldTable.length];
         Set<Integer> rehashedIndexes = new HashSet<>();
         for (int j = 0; j < oldTable.length; j++) {
@@ -1155,12 +969,12 @@ public class RubyHash extends RubyObject implements Map {
                 entry = next;
             }
         }
-        table = newTable;
+        setTable(newTable);
 
         // When a hash is large and contains duplicate keys, sometimes the above logic can not remove duplicate key.
         // searches duplicate keys and removes it.
         for (int hash : rehashedIndexes) {
-            RubyHashEntry entry = table[bucketIndex(hash, newTable.length)];
+            RubyHashEntry entry = getTable()[bucketIndex(hash, newTable.length)];
             while (entry != null) {
                 if (entry.hash == hash) {
                     RubyHashEntry nextEntry = entry.next;
@@ -1187,11 +1001,6 @@ public class RubyHash extends RubyObject implements Map {
     @JRubyMethod(name = "to_hash")
     public RubyHash to_hash(ThreadContext context) {
         return this;
-    }
-
-    @Deprecated(since = "9.3.0.0")
-    public RubyHash to_h(ThreadContext context) {
-        return to_h(context, Block.NULL_BLOCK);
     }
 
     @JRubyMethod
@@ -1221,7 +1030,7 @@ public class RubyHash extends RubyObject implements Map {
     }
 
     @Override
-    public RubyHash convertToHash() {
+    public RubyHashLinkedBuckets convertToHash() {
         return this;
     }
 
@@ -1301,7 +1110,7 @@ public class RubyHash extends RubyObject implements Map {
 
     protected void op_asetForString(Ruby runtime, RubyString key, IRubyObject value) {
         final RubyHashEntry entry = internalGetEntry(key);
-        if (entry != NO_ENTRY) {
+        if (entry != NULL_ENTRY) {
             entry.value = value;
         } else {
             checkIterating();
@@ -1314,7 +1123,7 @@ public class RubyHash extends RubyObject implements Map {
 
     protected void op_asetSmallForString(Ruby runtime, RubyString key, IRubyObject value) {
         final RubyHashEntry entry = internalGetEntry(key);
-        if (entry != NO_ENTRY) {
+        if (entry != NULL_ENTRY) {
             entry.value = value;
         } else {
             checkIterating();
@@ -1349,7 +1158,7 @@ public class RubyHash extends RubyObject implements Map {
             }
         }
 
-        final RubyHash otherHash = (RubyHash) other;
+        final RubyHashLinkedBuckets otherHash = (RubyHashLinkedBuckets) other;
 
         if (this.size() != otherHash.size()) {
             return context.fals;
@@ -1507,7 +1316,7 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod(rest = true)
     public IRubyObject except(ThreadContext context, IRubyObject[] keys) {
-        RubyHash result = hashCopyWithIdentity(context);
+        RubyHashLinkedBuckets result = hashCopyWithIdentity(context);
 
         for (int i = 0; i < keys.length; i++) {
             result.delete(context, keys[i]);
@@ -1549,18 +1358,13 @@ public class RubyHash extends RubyObject implements Map {
         return hasKey(key) ? context.tru : context.fals;
     }
 
-    @Deprecated(since = "9.3.5.0")
-    public RubyBoolean has_key_p(IRubyObject key) {
-        return has_key_p(metaClass.runtime.getCurrentContext(), key);
-    }
-
     /**
      * A Java API to test the presence of a (Ruby) key in the Hash
      * @param key the native (Ruby) key
      * @return true if the hash contains the provided key
      */
     public boolean hasKey(IRubyObject key) {
-        return internalGetEntry(key) != NO_ENTRY;
+        return internalGetEntry(key) != NULL_ENTRY;
     }
 
     private static class Found extends RuntimeException {
@@ -1616,11 +1420,11 @@ public class RubyHash extends RubyObject implements Map {
 
     private volatile int iteratorCount;
 
-    private static final AtomicIntegerFieldUpdater<RubyHash> ITERATOR_UPDATER;
+    private static final AtomicIntegerFieldUpdater<RubyHashLinkedBuckets> ITERATOR_UPDATER;
     static {
-        AtomicIntegerFieldUpdater<RubyHash> iterUp = null;
+        AtomicIntegerFieldUpdater<RubyHashLinkedBuckets> iterUp = null;
         try {
-            iterUp = AtomicIntegerFieldUpdater.newUpdater(RubyHash.class, "iteratorCount");
+            iterUp = AtomicIntegerFieldUpdater.newUpdater(RubyHashLinkedBuckets.class, "iteratorCount");
         } catch (Exception e) {
             // ignore, leave null
         }
@@ -1672,7 +1476,7 @@ public class RubyHash extends RubyObject implements Map {
     /** rb_hash_each
      *
      */
-    public RubyHash eachCommon(final ThreadContext context, final Block block) {
+    public RubyHashLinkedBuckets eachCommon(final ThreadContext context, final Block block) {
         iteratorVisitAll(context, YieldArrayVisitor, block);
 
         return this;
@@ -1687,13 +1491,13 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod(name = {"each", "each_pair"})
     public IRubyObject each(final ThreadContext context, final Block block) {
-        return block.isGiven() ? each_pairCommon(context, block) : enumeratorizeWithSize(context, this, "each", RubyHash::size);
+        return block.isGiven() ? each_pairCommon(context, block) : enumeratorizeWithSize(context, this, "each", RubyHashLinkedBuckets::size);
     }
 
     /** rb_hash_each_pair
      *
      */
-    public RubyHash each_pairCommon(final ThreadContext context, final Block block) {
+    public RubyHashLinkedBuckets each_pairCommon(final ThreadContext context, final Block block) {
         iteratorVisitAll(context, YieldKeyValueArrayVisitor, block);
 
         return this;
@@ -1715,7 +1519,7 @@ public class RubyHash extends RubyObject implements Map {
     /** rb_hash_each_value
      *
      */
-    public RubyHash each_valueCommon(final ThreadContext context, final Block block) {
+    public RubyHashLinkedBuckets each_valueCommon(final ThreadContext context, final Block block) {
         iteratorVisitAll(context, YieldValueVisitor, block);
 
         return this;
@@ -1730,13 +1534,13 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod
     public IRubyObject each_value(final ThreadContext context, final Block block) {
-        return block.isGiven() ? each_valueCommon(context, block) : enumeratorizeWithSize(context, this, "each_value", RubyHash::size);
+        return block.isGiven() ? each_valueCommon(context, block) : enumeratorizeWithSize(context, this, "each_value", RubyHashLinkedBuckets::size);
     }
 
     /** rb_hash_each_key
      *
      */
-    public RubyHash each_keyCommon(final ThreadContext context, final Block block) {
+    public RubyHashLinkedBuckets each_keyCommon(final ThreadContext context, final Block block) {
         iteratorVisitAll(context, YieldKeyVisitor, block);
 
         return this;
@@ -1751,13 +1555,13 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod
     public IRubyObject each_key(final ThreadContext context, final Block block) {
-        return block.isGiven() ? each_keyCommon(context, block) : enumeratorizeWithSize(context, this, "each_key", RubyHash::size);
+        return block.isGiven() ? each_keyCommon(context, block) : enumeratorizeWithSize(context, this, "each_key", RubyHashLinkedBuckets::size);
     }
 
     @JRubyMethod(name = "transform_keys", rest = true)
     public IRubyObject transform_keys(final ThreadContext context, IRubyObject[] args, final Block block) {
         if (args.length == 0 && !block.isGiven()) {
-            return enumeratorizeWithSize(context, this, "transform_keys", RubyHash::size);
+            return enumeratorizeWithSize(context, this, "transform_keys", RubyHashLinkedBuckets::size);
         }
 
         IRubyObject transformHash = args.length > 0 ?
@@ -1768,7 +1572,7 @@ public class RubyHash extends RubyObject implements Map {
         if (!isEmpty()) {
             if (!transformHash.isNil()) {
                 visitAll(context, (ctxt, self, key, value, index) -> {
-                    IRubyObject newKey = ((RubyHash) transformHash).internalGet(key);
+                    IRubyObject newKey = ((RubyHashLinkedBuckets) transformHash).internalGet(key);
                     if (newKey == null) newKey = block.isGiven() ? block.yield(ctxt, key) : key;
                     result.fastASet(newKey, value);
                 });
@@ -1780,8 +1584,8 @@ public class RubyHash extends RubyObject implements Map {
         return result;
     }
 
-    private RubyHash hashCopyWithIdentity(ThreadContext context) {
-        RubyHash copy = new RubyHash(context.runtime, hashClass(context));
+    private RubyHashLinkedBuckets hashCopyWithIdentity(ThreadContext context) {
+        RubyHashLinkedBuckets copy = new RubyHashLinkedBuckets(context.runtime, hashClass(context));
 
         copy.replaceWith(context, this);
 
@@ -1796,7 +1600,7 @@ public class RubyHash extends RubyObject implements Map {
     @JRubyMethod(name = "transform_keys!", rest = true)
     public IRubyObject transform_keys_bang(final ThreadContext context, IRubyObject[] args, final Block block) {
         if (args.length == 0 && !block.isGiven()) {
-            return enumeratorizeWithSize(context, this, "transform_keys!", RubyHash::size);
+            return enumeratorizeWithSize(context, this, "transform_keys!", RubyHashLinkedBuckets::size);
         }
 
         IRubyObject transformHash = args.length > 0 ?
@@ -1824,7 +1628,7 @@ public class RubyHash extends RubyObject implements Map {
                             continue;
                         }
                     } else {
-                        newKey = ((RubyHash) transformHash).internalGet(oldKey);
+                        newKey = ((RubyHashLinkedBuckets) transformHash).internalGet(oldKey);
 
                         if (newKey == null) {
                             if (block.isGiven()) {
@@ -1852,7 +1656,7 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod(name = "transform_values!")
     public IRubyObject transform_values_bang(final ThreadContext context, final Block block) {
-        if (!block.isGiven()) return enumeratorizeWithSize(context, this, "transform_values!", RubyHash::size);
+        if (!block.isGiven()) return enumeratorizeWithSize(context, this, "transform_values!", RubyHashLinkedBuckets::size);
 
         testFrozen("Hash");
         iteratorVisitAll(context, (ctxt, self, key, value, index) -> self.op_aset(ctxt, key, block.yield(ctxt, value)));
@@ -1862,14 +1666,14 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod(name = "select!", alias = "filter!")
     public IRubyObject select_bang(final ThreadContext context, final Block block) {
-        if (!block.isGiven()) return enumeratorizeWithSize(context, this, "select!", RubyHash::size);
+        if (!block.isGiven()) return enumeratorizeWithSize(context, this, "select!", RubyHashLinkedBuckets::size);
 
         return keep_ifCommon(context, block) ? this : context.nil;
     }
 
     @JRubyMethod
     public IRubyObject keep_if(final ThreadContext context, final Block block) {
-        if (!block.isGiven()) return enumeratorizeWithSize(context, this, "keep_if", RubyHash::size);
+        if (!block.isGiven()) return enumeratorizeWithSize(context, this, "keep_if", RubyHashLinkedBuckets::size);
 
         keep_ifCommon(context, block);
 
@@ -1887,11 +1691,6 @@ public class RubyHash extends RubyObject implements Map {
             }
         });
         return modified[0];
-    }
-
-    @Deprecated(since = "9.0.0.0")
-    public IRubyObject sort(ThreadContext context, Block block) {
-        return to_a(context).sort_bang(context, block);
     }
 
     @JRubyMethod
@@ -1967,20 +1766,6 @@ public class RubyHash extends RubyObject implements Map {
         return values(context);
     }
 
-    public static final VisitorWithState<RubyArray> StoreValueVisitor = new VisitorWithState<RubyArray>() {
-        @Override
-        public void visit(ThreadContext context, RubyHash self, IRubyObject key, IRubyObject value, int index, RubyArray values) {
-            values.storeInternal(context, index, value);
-        }
-    };
-
-    // like RubyHash.StoreValueVisitor but 'unsafe' - user needs to assure array capacity and adjust length
-    static final VisitorWithState SetValueVisitor = new VisitorWithState<RubyArray>() {
-        public void visit(ThreadContext context, RubyHash self, IRubyObject key, IRubyObject val, int index, RubyArray target) {
-            target.eltInternalSet(index, val);
-        }
-    };
-
     /** rb_hash_equal
      *
      */
@@ -2018,7 +1803,7 @@ public class RubyHash extends RubyObject implements Map {
     }
 
     public final boolean fastDelete(IRubyObject key) {
-        return internalDelete(key) != NO_ENTRY;
+        return internalDelete(key) != NULL_ENTRY;
     }
 
     /** rb_hash_delete
@@ -2039,7 +1824,7 @@ public class RubyHash extends RubyObject implements Map {
      */
     public IRubyObject delete(IRubyObject key) {
         RubyHashEntry entry = internalDelete(key);
-        return entry != NO_ENTRY ? entry.value : null;
+        return entry != NULL_ENTRY ? entry.value : null;
     }
 
     public IRubyObject delete(ThreadContext context, IRubyObject key) {
@@ -2051,9 +1836,9 @@ public class RubyHash extends RubyObject implements Map {
      */
     @JRubyMethod(name = "select", alias = "filter")
     public IRubyObject select(final ThreadContext context, final Block block) {
-        if (!block.isGiven()) return enumeratorizeWithSize(context, this, "select", RubyHash::size);
+        if (!block.isGiven()) return enumeratorizeWithSize(context, this, "select", RubyHashLinkedBuckets::size);
 
-        final RubyHash result = hashCopyWithIdentity(context);
+        final RubyHashLinkedBuckets result = hashCopyWithIdentity(context);
 
         if (!isEmpty()) {
             result.keep_ifCommon(context, block);
@@ -2074,7 +1859,7 @@ public class RubyHash extends RubyObject implements Map {
         for (int i = 0; i < args.length; i++) {
             IRubyObject key = args[i];
             IRubyObject value = internalGet(key);
-            if (value != null) result.op_aset(key, value);
+            if (value != null) result.op_aset(context, key, value);
         }
 
         return result;
@@ -2083,7 +1868,7 @@ public class RubyHash extends RubyObject implements Map {
     /** rb_hash_delete_if
      *
      */
-    public RubyHash delete_ifInternal(ThreadContext context, Block block) {
+    public RubyHashLinkedBuckets delete_ifInternal(ThreadContext context, Block block) {
         modify();
 
         iteratorVisitAll(context, DeleteIfVisitor, block);
@@ -2102,14 +1887,14 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod
     public IRubyObject delete_if(final ThreadContext context, final Block block) {
-        return block.isGiven() ? delete_ifInternal(context, block) : enumeratorizeWithSize(context, this, "delete_if", RubyHash::size);
+        return block.isGiven() ? delete_ifInternal(context, block) : enumeratorizeWithSize(context, this, "delete_if", RubyHashLinkedBuckets::size);
     }
 
     /** rb_hash_reject
      *
      */
-    public RubyHash rejectInternal(ThreadContext context, Block block) {
-        final RubyHash result = hashCopyWithIdentity(context);
+    public RubyHashLinkedBuckets rejectInternal(ThreadContext context, Block block) {
+        final RubyHashLinkedBuckets result = hashCopyWithIdentity(context);
 
         if (!isEmpty()) {
             result.delete_ifInternal(context, block);
@@ -2120,7 +1905,7 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod
     public IRubyObject reject(final ThreadContext context, final Block block) {
-        return block.isGiven() ? rejectInternal(context, block) : enumeratorizeWithSize(context, this, "reject", RubyHash::size);
+        return block.isGiven() ? rejectInternal(context, block) : enumeratorizeWithSize(context, this, "reject", RubyHashLinkedBuckets::size);
     }
 
     /** rb_hash_reject_bang
@@ -2135,7 +1920,7 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod(name = "reject!")
     public IRubyObject reject_bang(final ThreadContext context, final Block block) {
-        return block.isGiven() ? reject_bangInternal(context, block) : enumeratorizeWithSize(context, this, "reject!", RubyHash::size);
+        return block.isGiven() ? reject_bangInternal(context, block) : enumeratorizeWithSize(context, this, "reject!", RubyHashLinkedBuckets::size);
     }
 
     /** rb_hash_clear
@@ -2165,30 +1950,25 @@ public class RubyHash extends RubyObject implements Map {
         return result;
     }
 
-    private static final VisitorWithState<RubyHash> InvertVisitor = new VisitorWithState<RubyHash>() {
+    private static final VisitorWithState<RubyHashLinkedBuckets> InvertVisitor = new VisitorWithState<RubyHashLinkedBuckets>() {
         @Override
-        public void visit(ThreadContext context, RubyHash self, IRubyObject key, IRubyObject value, int index, RubyHash state) {
+        public void visit(ThreadContext context, RubyHash self, IRubyObject key, IRubyObject value, int index, RubyHashLinkedBuckets state) {
             state.op_aset(context, value, key);
         }
     };
-
-    @Deprecated(since = "9.3.0.0")
-    public RubyHash merge_bang(ThreadContext context, IRubyObject other, Block block) {
-        return merge_bang(context, new IRubyObject[]{other}, block);
-    }
 
     /** rb_hash_update
      *
      */
     @JRubyMethod(name = {"merge!", "update"}, rest = true)
-    public RubyHash merge_bang(ThreadContext context, IRubyObject[] others, Block block) {
+    public RubyHashLinkedBuckets merge_bang(ThreadContext context, IRubyObject[] others, Block block) {
         modify();
 
         if (others.length == 0) return this;
 
         for (int i = 0; i < others.length; i++) {
             final RubyHash otherHash = others[i].convertToHash();
-            if (otherHash.empty_p().isTrue()) continue;
+            if (otherHash.empty_p(context).isTrue()) continue;
             otherHash.visitAll(context, (ctxt, self, key, value, index) -> {
                 if (block.isGiven()) {
                     IRubyObject existing = internalGet(key);
@@ -2204,14 +1984,9 @@ public class RubyHash extends RubyObject implements Map {
     }
 
     public void addAll(ThreadContext context, RubyHash otherHash) {
-        if (!otherHash.empty_p().isTrue()) {
+        if (!otherHash.empty_p(context).isTrue()) {
             otherHash.visitAll(context, (ctxt, self, key, value, index) -> op_aset(ctxt, key, value));
         }
-    }
-
-    @Deprecated(since = "9.3.0.0")
-    public RubyHash merge(ThreadContext context, IRubyObject other, Block block) {
-        return merge(context, new IRubyObject[]{other}, block);
     }
 
     /** rb_hash_merge
@@ -2241,19 +2016,19 @@ public class RubyHash extends RubyObject implements Map {
 
         replaceWith(context, otherHash);
 
-        ifNone = otherHash.ifNone;
+        ifNone = otherHash.getIfNone();
 
-        if ((otherHash.hashFlags & PROCDEFAULT_HASH) != 0) {
-            hashFlags |= PROCDEFAULT_HASH;
+        if (otherHash.get(PROCDEFAULT_HASH)) {
+            set(PROCDEFAULT_HASH, true);
         } else {
-            hashFlags &= ~PROCDEFAULT_HASH;
+            set(PROCDEFAULT_HASH, false);
         }
 
         return this;
     }
 
     protected void replaceWith(ThreadContext context, RubyHash otherHash) {
-        if (otherHash.getClass() == RubyHash.class) {
+        if (otherHash.getClass() == RubyHashLinkedBuckets.class) {
             alloc();
             copyFrom(this, otherHash, otherHash.isComparedByIdentity());
         } else {
@@ -2354,7 +2129,7 @@ public class RubyHash extends RubyObject implements Map {
     @JRubyMethod(name = "compact")
     public IRubyObject compact(ThreadContext context) {
       IRubyObject res = dup();
-      ((RubyHash)res).compact_bang(context);
+      ((RubyHashLinkedBuckets)res).compact_bang(context);
       return res;
     }
 
@@ -2390,7 +2165,7 @@ public class RubyHash extends RubyObject implements Map {
 
     @JRubyMethod
     public IRubyObject dup(ThreadContext context) {
-        RubyHash dup = (RubyHash) super.dup();
+        RubyHashLinkedBuckets dup = (RubyHashLinkedBuckets) super.dup();
         dup.setComparedByIdentity(isComparedByIdentity());
         return dup;
     }
@@ -2471,30 +2246,30 @@ public class RubyHash extends RubyObject implements Map {
      * @param context
      * @return
      */
-    public RubyHash dupFast(final ThreadContext context) {
+    public RubyHashLinkedBuckets dupFast(final ThreadContext context) {
         final Ruby runtime = context.runtime;
-        RubyHash dup = new RubyHash(runtime, metaClass, this);
+        RubyHashLinkedBuckets dup = new RubyHashLinkedBuckets(runtime, metaClass, this);
 
         dup.setComparedByIdentity(this.isComparedByIdentity());
 
         dup.ifNone = this.ifNone;
 
-        if ((this.hashFlags & PROCDEFAULT_HASH) != 0) {
-            dup.hashFlags |= PROCDEFAULT_HASH;
+        if (this.get(PROCDEFAULT_HASH)) {
+            dup.set(PROCDEFAULT_HASH, true);
         } else {
-            dup.hashFlags &= ~PROCDEFAULT_HASH;
+            dup.set(PROCDEFAULT_HASH, false);
         }
 
         return dup;
     }
 
-    public RubyHash withRuby2Keywords(boolean ruby2Keywords) {
+    public RubyHashLinkedBuckets withRuby2Keywords(boolean ruby2Keywords) {
         setRuby2KeywordHash(ruby2Keywords);
         return this;
     }
 
     public boolean hasDefaultProc() {
-        return (hashFlags & PROCDEFAULT_HASH) != 0;
+        return get(PROCDEFAULT_HASH);
     }
 
     public IRubyObject getIfNone(){
@@ -2550,7 +2325,7 @@ public class RubyHash extends RubyObject implements Map {
     public static IRubyObject ruby2_keywords_hash(ThreadContext context, IRubyObject _self, IRubyObject arg) {
         TypeConverter.checkType(context, arg, hashClass(context));
 
-        RubyHash hash = (RubyHash) arg.dup();
+        RubyHashLinkedBuckets hash = (RubyHashLinkedBuckets) arg.dup();
         hash.setRuby2KeywordHash(true);
 
         return hash;
@@ -2560,34 +2335,10 @@ public class RubyHash extends RubyObject implements Map {
     public static IRubyObject ruby2_keywords_hash_p(ThreadContext context, IRubyObject _self, IRubyObject arg) {
         TypeConverter.checkType(context, arg, hashClass(context));
 
-        return asBoolean(context, ((RubyHash) arg).isRuby2KeywordHash());
+        return asBoolean(context, ((RubyHashLinkedBuckets) arg).isRuby2KeywordHash());
     }
 
-    private static class VisitorIOException extends RuntimeException {
-        VisitorIOException(Throwable cause) {
-            super(cause);
-        }
-    }
-
-    // FIXME:  Total hack to get flash in Rails marshalling/unmarshalling in session ok...We need
-    // to totally change marshalling to work with overridden core classes.
-    @Deprecated(since = "10.0.0.0", forRemoval = true)
-    @SuppressWarnings("removal")
-    public static void marshalTo(final RubyHash hash, final org.jruby.runtime.marshal.MarshalStream output) throws IOException {
-        var context = hash.getRuntime().getCurrentContext();
-        output.registerLinkTarget(context, hash);
-       int hashSize = hash.size();
-       output.writeInt(hashSize);
-        try {
-            hash.visitLimited(context, MarshalDumpVisitor, hashSize, output);
-        } catch (VisitorIOException e) {
-            throw (IOException)e.getCause();
-        }
-
-        if (hash.ifNone != UNDEF) output.dumpObject(hash.ifNone);
-    }
-
-    public static void marshalTo(ThreadContext context, RubyOutputStream out, final RubyHash hash, final MarshalDumper output) {
+    public static void marshalTo(ThreadContext context, RubyOutputStream out, final RubyHashLinkedBuckets hash, final MarshalDumper output) {
         output.registerObject(hash);
         int hashSize = hash.size();
         output.writeInt(out, hashSize);
@@ -2606,45 +2357,17 @@ public class RubyHash extends RubyObject implements Map {
         if (hash.ifNone != UNDEF) output.dumpObject(context, out, hash.ifNone);
     }
 
-    @Deprecated(since = "10.0.0.0", forRemoval = true)
-    @SuppressWarnings("removal")
-    private static final VisitorWithState<org.jruby.runtime.marshal.MarshalStream> MarshalDumpVisitor = new VisitorWithState<>() {
-        @Override
-        public void visit(ThreadContext context, RubyHash self, IRubyObject key, IRubyObject value, int index, org.jruby.runtime.marshal.MarshalStream output) {
-            try {
-                output.dumpObject(key);
-                output.dumpObject(value);
-            } catch (IOException e) {
-                throw new VisitorIOException(e);
-            }
-        }
-    };
-
-    @Deprecated(since = "10.0.0.0", forRemoval = true)
-    @SuppressWarnings("removal")
-    public static RubyHash unmarshalFrom(org.jruby.runtime.marshal.UnmarshalStream input, boolean defaultValue) throws IOException {
-        RubyHash result = (RubyHash) input.entry(newHash(input.getRuntime()));
-        int size = input.unmarshalInt();
-
-        for (int i = 0; i < size; i++) {
-            result.fastASetCheckString(input.getRuntime(), input.unmarshalObject(), input.unmarshalObject());
-        }
-
-        if (defaultValue) result.default_value_set(input.unmarshalObject());
-        return result;
-    }
-
     public static RubyHash unmarshalFrom(ThreadContext context, RubyInputStream in, MarshalLoader input, boolean defaultValue, boolean identity) {
         RubyHash result = Create.newHash(context);
         if (identity) result.setComparedByIdentity(true);
-        result = (RubyHash) input.entry(result);
+        result = (RubyHashLinkedBuckets) input.entry(result);
         int size = input.unmarshalInt(context, in);
 
         for (int i = 0; i < size; i++) {
             result.fastASetCheckString(context.runtime, input.unmarshalObject(context, in), input.unmarshalObject(context, in));
         }
 
-        if (defaultValue) result.default_value_set(input.unmarshalObject(context, in));
+        if (defaultValue) result.default_value_set(context, input.unmarshalObject(context, in));
         return result;
     }
 
@@ -2684,7 +2407,7 @@ public class RubyHash extends RubyObject implements Map {
     @Override
     public Object put(Object key, Object value) {
         Ruby runtime = metaClass.runtime;
-        IRubyObject existing = internalJavaPut(JavaUtil.convertJavaToUsableRubyObject(runtime, key), JavaUtil.convertJavaToUsableRubyObject(runtime, value));
+        IRubyObject existing = internalPutNoResize(JavaUtil.convertJavaToUsableRubyObject(runtime, key), JavaUtil.convertJavaToUsableRubyObject(runtime, value), true);
         return existing == null ? null : existing.toJava(Object.class);
     }
 
@@ -2698,9 +2421,9 @@ public class RubyHash extends RubyObject implements Map {
     public void putAll(Map map) {
         final Ruby runtime = metaClass.runtime;
         @SuppressWarnings("unchecked")
-        final Iterator<Map.Entry> iter = map.entrySet().iterator();
+        final Iterator<Entry> iter = map.entrySet().iterator();
         while ( iter.hasNext() ) {
-            Map.Entry entry = iter.next();
+            Entry entry = iter.next();
             internalPut(
                 JavaUtil.convertJavaToUsableRubyObject(runtime, entry.getKey()),
                 JavaUtil.convertJavaToUsableRubyObject(runtime, entry.getValue())
@@ -2715,9 +2438,9 @@ public class RubyHash extends RubyObject implements Map {
 
     @Override
     public boolean equals(Object other) {
-        if (!(other instanceof RubyHash)) return false;
+        if (!(other instanceof RubyHashLinkedBuckets)) return false;
         if (this == other) return true;
-        return op_equal(metaClass.runtime.getCurrentContext(), (RubyHash)other).isTrue();
+        return op_equal(metaClass.runtime.getCurrentContext(), (RubyHashLinkedBuckets)other).isTrue();
     }
 
     @Override
@@ -2758,7 +2481,7 @@ public class RubyHash extends RubyObject implements Map {
      * @return true if this object is compared by identity, false otherwise
      */
     public boolean isComparedByIdentity() {
-        return (hashFlags & COMPARE_BY_IDENTITY) != 0;
+        return get(COMPARE_BY_IDENTITY);
     }
 
     /**
@@ -2771,23 +2494,11 @@ public class RubyHash extends RubyObject implements Map {
     }
 
     public boolean isRuby2KeywordHash() {
-        return (hashFlags & RUBY2_KEYWORD) != 0;
+        return get(RUBY2_KEYWORD);
     }
 
     public void setRuby2KeywordHash(boolean value) {
         set(RUBY2_KEYWORD, value);
-    }
-
-    public final void set(int flag, boolean set) {
-        if (set) {
-            hashFlags |= flag;
-        } else {
-            hashFlags &= ~flag;
-        }
-    }
-
-    public final boolean get(int flag) {
-        return (hashFlags & flag) != 0;
     }
 
     private class BaseSet extends AbstractSet {
@@ -2804,22 +2515,22 @@ public class RubyHash extends RubyObject implements Map {
 
         @Override
         public boolean contains(Object o) {
-            return view.contains(RubyHash.this, o);
+            return view.contains(RubyHashLinkedBuckets.this, o);
         }
 
         @Override
         public void clear() {
-            RubyHash.this.clear();
+            RubyHashLinkedBuckets.this.clear();
         }
 
         @Override
         public int size() {
-            return RubyHash.this.size();
+            return RubyHashLinkedBuckets.this.size();
         }
 
         @Override
         public boolean remove(Object o) {
-            return view.remove(RubyHash.this, o);
+            return view.remove(RubyHashLinkedBuckets.this, o);
         }
     }
 
@@ -2837,22 +2548,22 @@ public class RubyHash extends RubyObject implements Map {
 
         @Override
         public boolean contains(Object o) {
-            return view.contains(RubyHash.this, o);
+            return view.contains(RubyHashLinkedBuckets.this, o);
         }
 
         @Override
         public void clear() {
-            RubyHash.this.clear();
+            RubyHashLinkedBuckets.this.clear();
         }
 
         @Override
         public int size() {
-            return RubyHash.this.size();
+            return RubyHashLinkedBuckets.this.size();
         }
 
         @Override
         public boolean remove(Object o) {
-            return view.remove(RubyHash.this, o);
+            return view.remove(RubyHashLinkedBuckets.this, o);
         }
     }
 
@@ -2910,8 +2621,8 @@ public class RubyHash extends RubyObject implements Map {
 
     private static abstract class EntryView {
         public abstract Object convertEntry(Ruby runtime, RubyHashEntry value);
-        public abstract boolean contains(RubyHash hash, Object o);
-        public abstract boolean remove(RubyHash hash, Object o);
+        public abstract boolean contains(RubyHashLinkedBuckets hash, Object o);
+        public abstract boolean remove(RubyHashLinkedBuckets hash, Object o);
     }
 
     private static final EntryView DIRECT_KEY_VIEW = new EntryView() {
@@ -2920,14 +2631,14 @@ public class RubyHash extends RubyObject implements Map {
             return entry.key;
         }
         @Override
-        public boolean contains(RubyHash hash, Object o) {
+        public boolean contains(RubyHashLinkedBuckets hash, Object o) {
             if (!(o instanceof IRubyObject)) return false;
             return hash.internalGet((IRubyObject)o) != null;
         }
         @Override
-        public boolean remove(RubyHash hash, Object o) {
+        public boolean remove(RubyHashLinkedBuckets hash, Object o) {
             if (!(o instanceof IRubyObject)) return false;
-            return hash.internalDelete((IRubyObject)o) != NO_ENTRY;
+            return hash.internalDelete((IRubyObject)o) != NULL_ENTRY;
         }
     };
 
@@ -2937,11 +2648,11 @@ public class RubyHash extends RubyObject implements Map {
             return entry.key.toJava(Object.class);
         }
         @Override
-        public boolean contains(RubyHash hash, Object o) {
+        public boolean contains(RubyHashLinkedBuckets hash, Object o) {
             return hash.containsKey(o);
         }
         @Override
-        public boolean remove(RubyHash hash, Object o) {
+        public boolean remove(RubyHashLinkedBuckets hash, Object o) {
             return hash.remove(o) != null;
         }
     };
@@ -2952,18 +2663,18 @@ public class RubyHash extends RubyObject implements Map {
             return entry.value;
         }
         @Override
-        public boolean contains(RubyHash hash, Object o) {
+        public boolean contains(RubyHashLinkedBuckets hash, Object o) {
             if (!(o instanceof IRubyObject)) return false;
             IRubyObject obj = (IRubyObject)o;
             return hash.hasValue(obj.getRuntime().getCurrentContext(), obj);
         }
         @Override
-        public boolean remove(RubyHash hash, Object o) {
+        public boolean remove(RubyHashLinkedBuckets hash, Object o) {
             if (!(o instanceof IRubyObject)) return false;
             IRubyObject obj = (IRubyObject) o;
             IRubyObject key = hash.internalIndex(obj.getRuntime().getCurrentContext(), obj);
             if (key == null) return false;
-            return hash.internalDelete(key) != NO_ENTRY;
+            return hash.internalDelete(key) != NULL_ENTRY;
         }
     };
 
@@ -2973,16 +2684,16 @@ public class RubyHash extends RubyObject implements Map {
             return entry.value.toJava(Object.class);
         }
         @Override
-        public boolean contains(RubyHash hash, Object o) {
+        public boolean contains(RubyHashLinkedBuckets hash, Object o) {
             return hash.containsValue(o);
         }
         @Override
-        public boolean remove(RubyHash hash, Object o) {
+        public boolean remove(RubyHashLinkedBuckets hash, Object o) {
             Ruby runtime = hash.metaClass.runtime;
             IRubyObject value = JavaUtil.convertJavaToUsableRubyObject(runtime, o);
             IRubyObject key = hash.internalIndex(runtime.getCurrentContext(), value);
             if (key == null) return false;
-            return hash.internalDelete(key) != NO_ENTRY;
+            return hash.internalDelete(key) != NULL_ENTRY;
         }
     };
 
@@ -2992,16 +2703,16 @@ public class RubyHash extends RubyObject implements Map {
             return entry;
         }
         @Override
-        public boolean contains(RubyHash hash, Object o) {
+        public boolean contains(RubyHashLinkedBuckets hash, Object o) {
             if (!(o instanceof RubyHashEntry)) return false;
             RubyHashEntry entry = (RubyHashEntry)o;
             RubyHashEntry candidate = hash.internalGetEntry(entry.key);
-            return candidate != NO_ENTRY && entry.equals(candidate);
+            return candidate != NULL_ENTRY && entry.equals(candidate);
         }
         @Override
-        public boolean remove(RubyHash hash, Object o) {
+        public boolean remove(RubyHashLinkedBuckets hash, Object o) {
             if (!(o instanceof RubyHashEntry)) return false;
-            return hash.internalDeleteEntry((RubyHashEntry)o) != NO_ENTRY;
+            return hash.internalDeleteEntry((RubyHashEntry)o) != NULL_ENTRY;
         }
     };
 
@@ -3011,21 +2722,21 @@ public class RubyHash extends RubyObject implements Map {
             return new ConvertingEntry(runtime, entry);
         }
         @Override
-        public boolean contains(RubyHash hash, Object o) {
+        public boolean contains(RubyHashLinkedBuckets hash, Object o) {
             if (!(o instanceof ConvertingEntry)) return false;
             ConvertingEntry entry = (ConvertingEntry)o;
             RubyHashEntry candidate = hash.internalGetEntry(entry.entry.key);
-            return candidate != NO_ENTRY && entry.entry.equals(candidate);
+            return candidate != NULL_ENTRY && entry.entry.equals(candidate);
         }
         @Override
-        public boolean remove(RubyHash hash, Object o) {
+        public boolean remove(RubyHashLinkedBuckets hash, Object o) {
             if (!(o instanceof ConvertingEntry)) return false;
             ConvertingEntry entry = (ConvertingEntry)o;
-            return hash.internalDeleteEntry(entry.entry) != NO_ENTRY;
+            return hash.internalDeleteEntry(entry.entry) != NULL_ENTRY;
         }
     };
 
-    private static class ConvertingEntry implements Map.Entry {
+    private static class ConvertingEntry implements Entry {
         private final RubyHashEntry entry;
         private final Ruby runtime;
 
@@ -3062,135 +2773,7 @@ public class RubyHash extends RubyObject implements Map {
         }
     }
 
-    /**
-     * Note: this is included as a compatibility measure for AR-JDBC
-     * @deprecated use RubyHash.op_aset instead
-     */
-    @Deprecated(forRemoval = true)
-    public IRubyObject aset(IRubyObject key, IRubyObject value) {
-        return op_aset(metaClass.runtime.getCurrentContext(), key, value);
-    }
-
-    /**
-     * Note: this is included as a compatibility measure for Mongrel+JRuby
-     * @deprecated use RubyHash.op_aref instead
-     */
-    @Deprecated(forRemoval = true)
-    public IRubyObject aref(IRubyObject key) {
-        return op_aref(metaClass.runtime.getCurrentContext(), key);
-    }
-
     private static HashSites sites(ThreadContext context) {
         return context.sites.Hash;
-    }
-
-    @Deprecated(since = "1.7.5")
-    public IRubyObject op_aset(IRubyObject key, IRubyObject value) {
-        return op_aset(metaClass.runtime.getCurrentContext(), key, value);
-    }
-
-    @Deprecated(since = "9.0.0.0")
-    public IRubyObject each_pair(final ThreadContext context, final Block block) {
-        return block.isGiven() ? each_pairCommon(context, block) : enumeratorizeWithSize(context, this, "each_pair", RubyHash::size);
-    }
-
-    @Deprecated(since = "9.1.3.0")
-    public RubyHash each_pairCommon(final ThreadContext context, final Block block, final boolean oneNine) {
-        iteratorVisitAll(context, YieldKeyValueArrayVisitor, block);
-
-        return this;
-    }
-
-    @Deprecated(since = "9.1.3.0")
-    public final void visitAll(Visitor visitor) {
-        // use -1 to disable concurrency checks
-        visitLimited(getRuntime().getCurrentContext(), visitor, -1, null);
-    }
-
-    /** rb_hash_default
-     *
-     */
-    @Deprecated(since = "9.1.3.0")
-    public IRubyObject default_value_get(ThreadContext context, IRubyObject[] args) {
-        return switch (args.length) {
-            case 0 -> default_value_get(context);
-            case 1 -> default_value_get(context, args[0]);
-            default -> throw argumentError(context, args.length, 1);
-        };
-    }
-
-    @Deprecated(since = "9.1.16.0")
-    protected void internalPutSmall(final IRubyObject key, final IRubyObject value, final boolean checkForExisting) {
-        internalPutNoResize(key, value, checkForExisting);
-    }
-
-    @Deprecated(since = "9.2.10.0")
-    @Override
-    public RubyArray to_a() {
-        return to_a(getCurrentContext());
-    }
-
-    @Deprecated(since = "9.2.10.0")
-    public IRubyObject default_value_set(final IRubyObject defaultValue) {
-        return default_value_set(getCurrentContext(), defaultValue);
-    }
-
-    @Deprecated(since = "9.2.10.0")
-    public IRubyObject default_proc() {
-        return (hashFlags & PROCDEFAULT_HASH) != 0 ? ifNone : metaClass.runtime.getNil();
-    }
-
-    @Deprecated(since = "9.2.10.0")
-    public IRubyObject set_default_proc(IRubyObject proc) {
-        return set_default_proc(getCurrentContext(), proc);
-    }
-
-    @Deprecated(since = "9.2.10.0")
-    public RubyFixnum rb_size() {
-        return rb_size(getCurrentContext());
-    }
-
-    @Deprecated(since = "9.2.10.0")
-    public RubyBoolean empty_p() {
-        return asBoolean(getCurrentContext(), isEmpty());
-    }
-
-    @Deprecated(since = "9.2.10.0")
-    public RubyHash rehash() {
-        return rehash(getCurrentContext());
-    }
-
-    @Deprecated(since = "9.2.10.0")
-    public RubyHash to_hash() {
-        return to_hash(getCurrentContext());
-    }
-
-    @Deprecated(since = "9.2.10.0")
-    public final RubyArray rb_values() {
-        return values(metaClass.runtime.getCurrentContext());
-    }
-
-    @Deprecated(since = "9.2.10.0")
-    public RubyHash rb_clear() {
-        return rb_clear(getCurrentContext());
-    }
-
-    @Deprecated(since = "9.4.6.0")
-    public IRubyObject any_p(ThreadContext context, IRubyObject[] args, Block block) {
-        return switch (args.length) {
-            case 0 -> any_p(context, block);
-            case 1 -> any_p(context, args[0], block);
-            default -> throw argumentError(context, args.length, 0, 1);
-        };
-    }
-
-    @Deprecated(since = "9.4.6.0")
-    public IRubyObject initialize(IRubyObject[] args, final Block block) {
-        var context = getCurrentContext();
-        return switch (args.length) {
-            case 0 -> initialize(context, block);
-            case 1 -> initialize(context, args[0], block);
-            default -> throw argumentError(context, args.length, 0, 1);
-        };
     }
 }

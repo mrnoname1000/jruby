@@ -562,7 +562,7 @@ public class RubyGlobal {
             
             EnvStringValidation.ensureValidEnvString(context, key, "key");
 
-            return internalGetEntry(expected) == NO_ENTRY ? context.fals : context.tru;
+            return !hasKey(expected) ? context.fals : context.tru;
         }
 
         @JRubyMethod(name = {"has_value?", "value?"})
@@ -729,7 +729,7 @@ public class RubyGlobal {
      * On all platforms, the keys are case-sensitive.
      * Used for ENV_JAVA.
      */
-    public static class StringOnlyRubyHash extends RubyHash {
+    public static class StringOnlyRubyHash extends RubyHashLinkedBuckets {
         // This is an ugly hack.  Windows ENV map processing all happens in this
         // class and not in the caseinsensitive hash.  In order to not refactor
         // both of these maps we will pass in a flag to specify whether we want

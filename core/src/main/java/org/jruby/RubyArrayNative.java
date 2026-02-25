@@ -3120,7 +3120,7 @@ public class RubyArrayNative<T extends IRubyObject> extends RubyArray<T> {
      */
     @Override
     protected RubyHash makeHash(Ruby runtime) {
-        return makeHash(new RubyHash(runtime, Math.min(realLength, 128), false));
+        return makeHash(RubyHashLinkedBuckets.newLBHash(runtime, Math.min(realLength, 128), false));
     }
 
     @Override
@@ -3133,7 +3133,7 @@ public class RubyArrayNative<T extends IRubyObject> extends RubyArray<T> {
     }
 
     private RubyHash makeHash(ThreadContext context, Block block) {
-        return makeHash(context, new RubyHash(context.runtime, Math.min(realLength, 128), false), block);
+        return makeHash(context, RubyHashLinkedBuckets.newLBHash(context.runtime, Math.min(realLength, 128), false), block);
     }
 
     private RubyHash makeHash(ThreadContext context, RubyHash hash, Block block) {
@@ -3166,7 +3166,7 @@ public class RubyArrayNative<T extends IRubyObject> extends RubyArray<T> {
      */
     public IRubyObject uniq_bang(ThreadContext context) {
         final RubyHash hash = makeHash(context.runtime);
-        final int newLength = hash.size;
+        final int newLength = hash.size();
         if (realLength == newLength) return context.nil;
 
         modify(context); // in case array isShared
@@ -3185,7 +3185,7 @@ public class RubyArrayNative<T extends IRubyObject> extends RubyArray<T> {
         if (!block.isGiven()) return uniq_bang(context);
 
         final RubyHash hash = makeHash(context, block);
-        final int newLength = hash.size;
+        final int newLength = hash.size();
         if (realLength == newLength) return context.nil;
 
         // after evaluating the block, a new modify check is needed
@@ -3204,7 +3204,7 @@ public class RubyArrayNative<T extends IRubyObject> extends RubyArray<T> {
      */
     public IRubyObject uniq(ThreadContext context) {
         RubyHash hash = makeHash(context.runtime);
-        final int newLength = hash.size;
+        final int newLength = hash.size();
         if (realLength == newLength) return makeShared();
 
         RubyArrayNative result = newBlankArrayInternal(context.runtime, arrayClass(context), newLength);
@@ -3216,7 +3216,7 @@ public class RubyArrayNative<T extends IRubyObject> extends RubyArray<T> {
     public IRubyObject uniq(ThreadContext context, Block block) {
         if (!block.isGiven()) return uniq(context);
         RubyHash hash = makeHash(context, block);
-        final int newLength = hash.size;
+        final int newLength = hash.size();
         if (realLength == newLength) return makeShared();
 
         RubyArrayNative result = newBlankArrayInternal(context.runtime, arrayClass(context), newLength);
@@ -3375,9 +3375,9 @@ public class RubyArrayNative<T extends IRubyObject> extends RubyArray<T> {
         if (maxSize == 0) return Create.newEmptyArray(context);
 
         RubyHash set = ary2.makeHash(makeHash(context.runtime));
-        RubyArrayNative res = newBlankArrayInternal(context.runtime, set.size);
+        RubyArrayNative res = newBlankArrayInternal(context.runtime, set.size());
         res.setValuesFrom(context, set);
-        res.realLength = set.size;
+        res.realLength = set.size();
 
         int index = res.getLength();
         // if index is 1 and we made a size 2 array, repack

@@ -1981,7 +1981,7 @@ public class RubyEnumerable {
     public static IRubyObject group_by(ThreadContext context, IRubyObject self, final Block block) {
         if (!block.isGiven()) return enumeratorizeWithSize(context, self, "group_by", RubyEnumerable::size);
 
-        final RubyHash result = new RubyHash(context.runtime);
+        final RubyHash result = RubyHashLinkedBuckets.newLBHash(context.runtime);
 
         callEach(context, eachSite(context), self, Signature.OPTIONAL, (ctx, largs, blk) -> {
             IRubyObject larg = packEnumValues(ctx, largs);
@@ -2031,7 +2031,7 @@ public class RubyEnumerable {
 
     @JRubyMethod
     public static IRubyObject uniq(ThreadContext context, IRubyObject self, final Block block) {
-        final RubyHash hash = new RubyHash(context.runtime, 12, false);
+        final RubyHash hash = RubyHashLinkedBuckets.newLBHash(context.runtime, 12, false);
 
         final CachingCallSite each = eachSite(context);
         if (block.isGiven()) {
@@ -2046,7 +2046,7 @@ public class RubyEnumerable {
 
                     IRubyObject key = ary ? block.yieldArray(ctx, obj, null) : block.yield(ctx, obj);
 
-                    if (hash.getEntry(key) == RubyHash.NO_ENTRY) {
+                    if (!hash.hasKey(key)) {
                         hash.internalPut(key, obj);
                     }
                     return obj;
@@ -2054,7 +2054,7 @@ public class RubyEnumerable {
                 @Override
                 public IRubyObject call(ThreadContext ctx, IRubyObject obj, Block blk) {
                     IRubyObject key = block.yield(ctx, obj);
-                    if (hash.getEntry(key) == RubyHash.NO_ENTRY) {
+                    if (!hash.hasKey(key)) {
                         hash.internalPut(key, obj);
                     }
                     return obj;
