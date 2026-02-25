@@ -112,7 +112,7 @@ public final class ThreadContext {
      *
      * Usage: Builtins.checkIntegerPlus(context) reads context.builtinBits[0]
      */
-    public final short[] builtinBits;
+    public final int[] builtinBits;
 
     // Thread#set_trace_func for specific threads events.  We need this because successive
     // Thread.set_trace_funcs will end up replacing the current one (as opposed to add_trace_func).
