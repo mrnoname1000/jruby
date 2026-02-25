@@ -318,12 +318,12 @@ public class TestRaiseException extends Base {
 
         boolean hash_default = false;
         for ( Object element : trace ) {
-            if ( element.toString().contains("org.jruby.RubyHash.default")) {
+            if ( element.toString().contains("org.jruby.RubyHashLinkedBuckets.default")) {
                 if ( hash_default ) fail("duplicate " + element + " in : \n" + fullTrace);
                 hash_default = true;
             }
         }
-        assertTrue("missing org.jruby.RubyHash.default ... in : \n" + fullTrace, hash_default);
+        assertTrue("missing org.jruby.RubyHashLinkedBuckets.default ... in : \n" + fullTrace, hash_default);
     }
 
     public void testRubyExceptionUsingEmbedAdapter() {
