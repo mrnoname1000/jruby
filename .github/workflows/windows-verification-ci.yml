@@ -1,4 +1,4 @@
-name: JRuby CI
+name: Verify Rails 7 on Windows
 
 on: [push, pull_request]
 
