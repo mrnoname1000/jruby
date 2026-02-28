@@ -849,7 +849,15 @@ JAVA_OPTS="$JAVA_OPTS ${JAVA_MEM-} ${JAVA_STACK-}"
 
 JFFI_OPTS="-Djffi.boot.library.path=$JRUBY_HOME/lib/jni"
 
-CLASSPATH="${CP-}${CP_DELIMITER}${CLASSPATH-}"
+if [ -n "${CP-}" ]; then
+    if [ -n "${CLASSPATH-}" ]; then
+        CLASSPATH="${CP-}${CP_DELIMITER}${CLASSPATH-}"
+    else
+        CLASSPATH="${CP-}"
+    fi
+else
+    CLASSPATH="${CLASSPATH-}"
+fi
 
 # ----- Module and Class Data Sharing flags for Java 9+ -----------------------
 
@@ -992,13 +1000,22 @@ prepend java_args "$JAVACMD"
 if $NO_BOOTCLASSPATH || $VERIFY_JRUBY; then
     if $use_modules; then
         # Use module path instead of classpath for the jruby libs
-        append java_args --module-path "$JRUBY_CP" -classpath "$CLASSPATH"
+        append java_args --module-path "$JRUBY_CP"
+        if [ -n "$CLASSPATH" ]; then
+            append java_args -classpath "$CLASSPATH"
+        fi
     else
-        append java_args -classpath "$JRUBY_CP$CP_DELIMITER$CLASSPATH"
+        if [ -n "$CLASSPATH" ]; then
+            append java_args -classpath "$JRUBY_CP$CP_DELIMITER$CLASSPATH"
+        else
+            append java_args -classpath "$JRUBY_CP"
+        fi
     fi
 else
     append java_args -Xbootclasspath/a:"$JRUBY_CP"
-    append java_args -classpath "$CLASSPATH"
+    if [ -n "$CLASSPATH" ]; then
+        append java_args -classpath "$CLASSPATH"
+    fi
     append java_args -Djruby.home="$JRUBY_HOME"
 fi
 
