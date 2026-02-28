@@ -997,26 +997,22 @@ fi
 
 prepend java_args "$JAVACMD"
 
+classpath_value=$CLASSPATH
 if $NO_BOOTCLASSPATH || $VERIFY_JRUBY; then
     if $use_modules; then
         # Use module path instead of classpath for the jruby libs
         append java_args --module-path "$JRUBY_CP"
-        if [ -n "$CLASSPATH" ]; then
-            append java_args -classpath "$CLASSPATH"
-        fi
     else
-        if [ -n "$CLASSPATH" ]; then
-            append java_args -classpath "$JRUBY_CP$CP_DELIMITER$CLASSPATH"
-        else
-            append java_args -classpath "$JRUBY_CP"
-        fi
+        classpath_value="$JRUBY_CP$CP_DELIMITER$classpath_value"
+        # Trim extra delimiter we might have appended
+        classpath_value="${classpath_value%"$CP_DELIMITER"}"
     fi
 else
     append java_args -Xbootclasspath/a:"$JRUBY_CP"
-    if [ -n "$CLASSPATH" ]; then
-        append java_args -classpath "$CLASSPATH"
-    fi
-    append java_args -Djruby.home="$JRUBY_HOME"
+fi
+
+if [ -n "$classpath_value" ]; then
+    append java_args -classpath "$classpath_value"
 fi
 
 append java_args -Djruby.home="$JRUBY_HOME" \
